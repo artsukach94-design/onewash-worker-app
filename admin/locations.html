@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WashOS — Мийки-клієнти</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>WashOS</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">WS</div>
+        <div class="brand-text"><b>WashOS</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item active" href="locations.html">Мийки-клієнти</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Мийки-клієнти платформи</h1><div class="sub">Тільки для суперадміна</div></div>
+        <button class="btn btn-primary btn-sm" id="add-location-btn" style="display:none;">+ Підключити нову мийку</button>
+      </div>
+      <div class="content" id="page-content">
+        <div id="not-superadmin" class="empty-state" style="display:none;">Цей розділ доступний лише власнику платформи.</div>
+        <div id="locations-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: КЕРУВАННЯ АДМІНАМИ МИЙКИ -->
+<div id="admins-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:400px;max-height:85vh;overflow-y:auto;">
+    <h3 style="margin:0 0 4px;font-size:15px;" id="am-location-name">Адміни мийки</h3>
+    <p style="margin:0 0 14px;font-size:12px;color:var(--text-2);">Список адмінів, які мають доступ до цієї мийки</p>
+    <div id="am-list" style="margin-bottom:16px;"></div>
+
+    <div class="section-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin:12px 0 8px;">Додати адміна</div>
+    <p style="font-size:11.5px;color:var(--text-2);margin:0 0 10px;">Спочатку створіть користувача в Supabase → Authentication, потім вкажіть його email/ім'я і User UID тут</p>
+    <div class="form-group"><label>Повне ім'я</label><input type="text" id="am-name" placeholder="Ім'я адміна мийки"></div>
+    <div class="form-group"><label>User UID (з Supabase Auth)</label><input type="text" id="am-uid" placeholder="a1b2c3d4-..."></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn" style="flex:1;" id="am-close">Закрити</button>
+      <button class="btn btn-primary" style="flex:1;" id="am-add">Додати доступ</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let isSuperadmin = false;
+  let allLocations = [];
+
+  initAdminPage(async (admin, locations, locationId) => {
+    isSuperadmin = admin.is_superadmin;
+    if (isSuperadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+
+    if (!isSuperadmin) {
+      document.getElementById('not-superadmin').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('add-location-btn').style.display = 'inline-block';
+    await loadLocations();
+  });
+
+  async function loadLocations() {
+    const { data: locations, error } = await supabase.from('locations').select('*').order('name');
+    if (error) { console.error(error); return; }
+    allLocations = locations;
+
+    const { data: accessRows } = await supabase.from('admin_location_access').select('location_id');
+    const accessCount = {};
+    (accessRows || []).forEach(r => { accessCount[r.location_id] = (accessCount[r.location_id] || 0) + 1; });
+
+    const list = document.getElementById('locations-list');
+    if (locations.length === 0) {
+      list.innerHTML = '<div class="empty-state">Мийок ще немає</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    locations.forEach(loc => {
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      panel.innerHTML = `
+        <div class="panel-head">
+          <h3>${loc.name}${loc.city ? ' · ' + loc.city : ''}</h3>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:12px;color:var(--text-2);">${accessCount[loc.id] || 0} адмін(ів)</span>
+            <button class="btn btn-sm manage-admins-btn" data-id="${loc.id}" data-name="${loc.name}">Керувати адмінами</button>
+          </div>
+        </div>
+      `;
+      list.appendChild(panel);
+    });
+
+    document.querySelectorAll('.manage-admins-btn').forEach(btn => {
+      btn.addEventListener('click', () => openAdminsModal(btn.dataset.id, btn.dataset.name));
+    });
+  }
+
+  document.getElementById('add-location-btn').addEventListener('click', async () => {
+    const name = prompt('Назва нової мийки (наприклад, "CleanCar"):');
+    if (!name) return;
+    const city = prompt('Місто:');
+    const { error } = await supabase.from('locations').insert({ name, city });
+    if (error) { console.error(error); alert('Помилка додавання мийки'); return; }
+    await loadLocations();
+  });
+
+  // ==== МОДАЛКА АДМІНІВ МИЙКИ ====
+  const adminsModal = document.getElementById('admins-modal');
+  let editingLocationId = null;
+
+  async function openAdminsModal(locationId, locationName) {
+    editingLocationId = locationId;
+    document.getElementById('am-location-name').textContent = 'Адміни — ' + locationName;
+    adminsModal.style.display = 'flex';
+    await renderAdminsList();
+  }
+
+  document.getElementById('am-close').addEventListener('click', () => adminsModal.style.display = 'none');
+
+  async function renderAdminsList() {
+    const { data: rows, error } = await supabase
+      .from('admin_location_access')
+      .select('id, platform_admins(id, full_name)')
+      .eq('location_id', editingLocationId);
+
+    const box = document.getElementById('am-list');
+    if (error) { console.error(error); box.innerHTML = '<p>Помилка завантаження</p>'; return; }
+
+    if (!rows || rows.length === 0) {
+      box.innerHTML = '<p style="font-size:12.5px;color:var(--text-2);">Ще немає адмінів із доступом до цієї мийки</p>';
+      return;
+    }
+
+    box.innerHTML = '';
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;';
+      row.innerHTML = `<span>${r.platform_admins?.full_name || 'Без імені'}</span>
+        <span style="color:var(--red-600);cursor:pointer;font-size:12px;" data-access-id="${r.id}">Прибрати доступ</span>`;
+      box.appendChild(row);
+    });
+
+    box.querySelectorAll('[data-access-id]').forEach(link => {
+      link.addEventListener('click', async () => {
+        if (!confirm('Прибрати доступ цього адміна до мийки?')) return;
+        await supabase.from('admin_location_access').delete().eq('id', link.dataset.accessId);
+        await renderAdminsList();
+        await loadLocations();
+      });
+    });
+  }
+
+  document.getElementById('am-add').addEventListener('click', async () => {
+    const fullName = document.getElementById('am-name').value.trim();
+    const uid = document.getElementById('am-uid').value.trim();
+    if (!uid) { alert('Вкажіть User UID'); return; }
+
+    try {
+      let { data: existingAdmin } = await supabase
+        .from('platform_admins').select('id').eq('auth_user_id', uid).maybeSingle();
+
+      let adminId;
+      if (existingAdmin) {
+        adminId = existingAdmin.id;
+      } else {
+        const { data: newAdmin, error: aErr } = await supabase
+          .from('platform_admins').insert({ auth_user_id: uid, full_name: fullName, is_superadmin: false }).select().single();
+        if (aErr) throw aErr;
+        adminId = newAdmin.id;
+      }
+
+      const { error: accessErr } = await supabase
+        .from('admin_location_access').insert({ admin_id: adminId, location_id: editingLocationId });
+      if (accessErr) throw accessErr;
+
+      document.getElementById('am-name').value = '';
+      document.getElementById('am-uid').value = '';
+      await renderAdminsList();
+      await loadLocations();
+
+    } catch (err) {
+      console.error(err);
+      alert('Помилка додавання доступу (можливо, цей адмін уже має доступ до цієї мийки)');
+    }
+  });
+</script>
+</body>
+</html>
