@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WashOS — Дошка дня</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>WashOS</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">WS</div>
+        <div class="brand-text"><b>WashOS</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item active" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Дошка дня</h1><div class="sub" id="page-sub">—</div></div>
+      </div>
+      <div class="content" id="page-content">
+
+        <div class="stat-grid">
+          <div class="stat-card"><div class="label">Записів сьогодні</div><div class="value" id="stat-total">—</div></div>
+          <div class="stat-card"><div class="label">Виконано</div><div class="value" id="stat-done">—</div></div>
+          <div class="stat-card"><div class="label">Не підтверджено</div><div class="value" id="stat-pending">—</div></div>
+          <div class="stat-card"><div class="label">Не з'явились</div><div class="value" id="stat-noshow">—</div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Розклад на сьогодні</h3></div>
+          <div class="panel-body" id="schedule-list">Завантаження...</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout, formatTime, subscribeToTable } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  initAdminPage(async (admin, locations, locationId) => {
+    if (admin.is_superadmin) {
+      document.getElementById('platform-nav').style.display = 'block';
+    }
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+
+    await loadDashboard(locationId);
+
+    subscribeToTable('dashboard-' + locationId, 'bookings', `location_id=eq.${locationId}`, () => {
+      loadDashboard(locationId);
+    });
+  });
+
+  async function loadDashboard(locationId) {
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+
+    const { data: bookings, error } = await supabase
+      .from('bookings')
+      .select('*, cars(*), clients(*), wash_types(*), staff(full_name)')
+      .eq('location_id', locationId)
+      .gte('scheduled_at', startOfDay.toISOString())
+      .lte('scheduled_at', endOfDay.toISOString())
+      .order('scheduled_at');
+
+    if (error) { console.error(error); return; }
+
+    const total = bookings.length;
+    const done = bookings.filter(b => b.status === 'done').length;
+    const pending = bookings.filter(b => b.status === 'pending').length;
+    const noShow = bookings.filter(b => b.status === 'no_show').length;
+
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-done').textContent = done;
+    document.getElementById('stat-pending').textContent = pending;
+    document.getElementById('stat-noshow').textContent = noShow;
+
+    const todayStr = new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
+    document.getElementById('page-sub').textContent = `${todayStr} — ${total} записів`;
+
+    const list = document.getElementById('schedule-list');
+    if (bookings.length === 0) {
+      list.innerHTML = '<div class="empty-state">На сьогодні записів немає</div>';
+      return;
+    }
+
+    const statusLabels = { pending: 'Не підтверджено', confirmed: 'Заброньовано', in_progress: 'В процесі', done: 'Виконано', no_show: 'Не з\'явився', cancelled: 'Скасовано' };
+    const pillClasses = { pending: 'pending', confirmed: 'confirmed', in_progress: 'progress', done: 'done', no_show: 'no_show', cancelled: 'no_show' };
+    const payLabels = { paid: '<span class="pay-badge paid">Передоплата ✓</span>', unpaid: '<span class="pay-badge unpaid">Не оплачено</span>' };
+
+    list.innerHTML = '';
+    bookings.forEach(b => {
+      const row = document.createElement('div');
+      row.className = 'sched-row';
+      const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.cars.plate || ''}` : 'Без даних авто';
+      const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
+      const staffLabel = b.staff?.full_name || 'Не призначено';
+      const washLabel = b.wash_types?.name || '';
+      const sourceLabel = { site: 'сайт', manual: 'вручну', call: 'дзвінок', admin: 'адмін' }[b.source] || b.source;
+
+      row.innerHTML = `
+        <div class="sched-time">${formatTime(b.scheduled_at)}</div>
+        <div class="sched-info">
+          <b>${carLabel}</b>
+          <span>${clientLabel} · ${washLabel} · ${staffLabel} · ${sourceLabel}</span>
+        </div>
+        ${payLabels[b.prepayment_status] || ''}
+        <span class="pill ${pillClasses[b.status] || ''}">${statusLabels[b.status] || b.status}</span>
+      `;
+      list.appendChild(row);
+    });
+  }
+</script>
+</body>
+</html>
