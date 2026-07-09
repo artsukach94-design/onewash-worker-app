@@ -107,3 +107,14 @@ export function formatTime(dateStr) {
 export function formatDayShort(date) {
   return date.toLocaleDateString('uk-UA', { weekday: 'short' }).replace('.', '');
 }
+
+// Підписка на зміни в таблиці в реальному часі (Supabase Realtime).
+// onChange викликається при будь-якій вставці/оновленні/видаленні рядка,
+// що відповідає фільтру. Найпростіший підхід — просто перезавантажити дані.
+export function subscribeToTable(channelName, table, filter, onChange) {
+  const channel = supabase
+    .channel(channelName)
+    .on('postgres_changes', { event: '*', schema: 'public', table, filter }, onChange)
+    .subscribe();
+  return channel;
+}
