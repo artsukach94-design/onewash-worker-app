@@ -68,7 +68,10 @@
         <div class="section-label">Додаткові послуги</div>
         <div class="job-card" id="extras-box" style="padding:2px 14px;"></div>
 
-        <div class="total-box"><div class="t">Загальна вартість</div><div class="v" id="total-price">0 грн</div></div>
+        <div class="total-box" style="align-items:center;">
+        <div class="t">Загальна вартість, грн<br><span style="font-size:10.5px;color:#9FC3DC;">можна змінити вручну (складне забруднення тощо)</span></div>
+        <input type="text" id="total-price" value="0" style="width:110px;text-align:right;font-size:18px;font-weight:600;background:transparent;border:none;color:#fff;border-bottom:1.5px solid rgba(255,255,255,0.3);">
+      </div>
 
         <div class="form-group"><label>Нотатки</label><textarea id="notes" placeholder="Плями на сидінні, подряпина на бампері..."></textarea></div>
 
@@ -334,6 +337,11 @@
   }
 
   function updateTotal() {
+    const priceInput = document.getElementById('total-price');
+    if (priceInput.dataset.dirty === 'true') {
+      return parseFloat(priceInput.value) || 0;
+    }
+
     const vChip = document.querySelector('#vtype-box .sel');
     const wChip = document.querySelector('#washtype-box .sel');
     if (!vChip || !wChip) return 0;
@@ -345,9 +353,13 @@
       total += Number(cb.dataset.price);
     });
 
-    document.getElementById('total-price').textContent = total.toLocaleString('uk-UA') + ' грн';
+    priceInput.value = total;
     return total;
   }
+
+  document.getElementById('total-price').addEventListener('input', () => {
+    document.getElementById('total-price').dataset.dirty = 'true';
+  });
 
   // Показ прев'ю фото одразу після вибору файлу
   ['front', 'back', 'left', 'right'].forEach(angle => {
