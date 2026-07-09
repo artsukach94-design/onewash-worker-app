@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WashOS — Послуги та ціни</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>WashOS</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">WS</div>
+        <div class="brand-text"><b>WashOS</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item active" href="services.html">Послуги та ціни</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Послуги та ціни</h1><div class="sub">Керування прайсом цієї мийки</div></div>
+      </div>
+      <div class="content" id="page-content">
+
+        <div class="panel">
+          <div class="panel-head"><h3>Типи авто</h3><button class="btn btn-sm" id="add-vtype">+ Додати тип авто</button></div>
+          <div class="panel-body" id="vtype-list" style="display:flex;gap:8px;flex-wrap:wrap;">Завантаження...</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Типи послуг (мийки)</h3><button class="btn btn-sm" id="add-washtype">+ Додати тип послуги</button></div>
+          <div class="panel-body" id="washtype-list" style="display:flex;gap:8px;flex-wrap:wrap;">Завантаження...</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Ціни за типом авто × типом послуги</h3></div>
+          <div class="panel-body" style="padding:0;">
+            <table id="price-matrix"><tr><td class="empty-state">Завантаження...</td></tr></table>
+            <div style="padding:12px 18px;font-size:12px;color:var(--text-2);">Ціна зберігається автоматично, коли ви виходите з поля вводу</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Додаткові послуги</h3><button class="btn btn-primary btn-sm" id="add-extra">+ Додати послугу</button></div>
+          <div class="panel-body" style="padding:0;">
+            <table id="extras-table"><tr><th>Назва</th><th>Ціна, грн</th><th>Активна</th><th></th></tr></table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Передоплата</h3></div>
+          <div class="panel-body">
+            <div class="form-group" style="max-width:220px;">
+              <label>Сума передоплати при онлайн-записі, грн</label>
+              <input type="text" id="prepayment-amount" value="200">
+            </div>
+            <button class="btn btn-primary btn-sm" id="save-prepayment">Зберегти</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentLocationId = null;
+  let vehicleTypes = [], washTypes = [], washPrices = [];
+
+  initAdminPage(async (admin, locations, locationId) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+    currentLocationId = locationId;
+    await loadAll();
+  });
+
+  async function loadAll() {
+    await Promise.all([loadTypes(), loadExtras(), loadLocationSettings()]);
+    renderPriceMatrix();
+  }
+
+  // ==== ТИПИ АВТО / ТИПИ ПОСЛУГ ====
+  async function loadTypes() {
+    const [{ data: vt }, { data: wt }, { data: wp }] = await Promise.all([
+      supabase.from('vehicle_types').select('*').eq('location_id', currentLocationId).order('sort_order'),
+      supabase.from('wash_types').select('*').eq('location_id', currentLocationId).order('sort_order'),
+      supabase.from('wash_prices').select('*')
+    ]);
+    vehicleTypes = vt || [];
+    washTypes = wt || [];
+    washPrices = wp || [];
+
+    renderTypeChips('vtype-list', vehicleTypes, 'vehicle_types');
+    renderTypeChips('washtype-list', washTypes, 'wash_types');
+  }
+
+  function renderTypeChips(containerId, items, tableName) {
+    const box = document.getElementById(containerId);
+    box.innerHTML = '';
+    if (items.length === 0) {
+      box.innerHTML = '<span style="font-size:12.5px;color:var(--text-2);">Ще нічого не додано</span>';
+      return;
+    }
+    items.forEach(item => {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:20px;padding:6px 8px 6px 12px;font-size:12.5px;';
+      chip.innerHTML = `${item.name} <span style="cursor:pointer;color:var(--red-600);font-weight:600;" title="Видалити">×</span>`;
+      chip.querySelector('span').addEventListener('click', async () => {
+        if (!confirm(`Видалити "${item.name}"? Якщо для нього вже є ціни або авто — видалення може не спрацювати.`)) return;
+        const { error } = await supabase.from(tableName).delete().eq('id', item.id);
+        if (error) { alert('Не вдалося видалити: можливо, тип ще використовується в цінах або записах.'); console.error(error); return; }
+        await loadTypes();
+        renderPriceMatrix();
+      });
+      box.appendChild(chip);
+    });
+  }
+
+  document.getElementById('add-vtype').addEventListener('click', async () => {
+    const name = prompt('Назва нового типу авто (наприклад, "Кабріолет"):');
+    if (!name) return;
+    const { error } = await supabase.from('vehicle_types').insert({
+      location_id: currentLocationId, name, sort_order: vehicleTypes.length + 1
+    });
+    if (error) { console.error(error); alert('Помилка додавання'); return; }
+    await loadTypes();
+    renderPriceMatrix();
+  });
+
+  document.getElementById('add-washtype').addEventListener('click', async () => {
+    const name = prompt('Назва нового типу послуги (наприклад, "VIP-мийка"):');
+    if (!name) return;
+    const { error } = await supabase.from('wash_types').insert({
+      location_id: currentLocationId, name, sort_order: washTypes.length + 1
+    });
+    if (error) { console.error(error); alert('Помилка додавання'); return; }
+    await loadTypes();
+    renderPriceMatrix();
+  });
+
+  // ==== МАТРИЦЯ ЦІН ====
+  function renderPriceMatrix() {
+    const table = document.getElementById('price-matrix');
+    if (vehicleTypes.length === 0 || washTypes.length === 0) {
+      table.innerHTML = '<tr><td class="empty-state">Додайте хоча б один тип авто і тип послуги, щоб задати ціни</td></tr>';
+      return;
+    }
+
+    let html = '<tr><th>Тип авто \\ послуга</th>' + washTypes.map(w => `<th>${w.name}</th>`).join('') + '</tr>';
+    vehicleTypes.forEach(v => {
+      html += `<tr><td>${v.name}</td>`;
+      washTypes.forEach(w => {
+        const priceRow = washPrices.find(p => p.vehicle_type_id === v.id && p.wash_type_id === w.id);
+        const price = priceRow ? priceRow.price : '';
+        html += `<td><input type="text" value="${price}" data-vtype="${v.id}" data-wtype="${w.id}" style="width:80px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>`;
+      });
+      html += '</tr>';
+    });
+    table.innerHTML = html;
+
+    table.querySelectorAll('input').forEach(input => {
+      input.addEventListener('blur', async () => {
+        const price = parseFloat(input.value);
+        if (isNaN(price)) return;
+        const { error } = await supabase.from('wash_prices').upsert({
+          vehicle_type_id: input.dataset.vtype,
+          wash_type_id: input.dataset.wtype,
+          price
+        }, { onConflict: 'wash_type_id,vehicle_type_id' });
+        if (error) console.error(error);
+      });
+    });
+  }
+
+  // ==== ДОДАТКОВІ ПОСЛУГИ ====
+  async function loadExtras() {
+    const { data: extras, error } = await supabase
+      .from('extra_services').select('*').eq('location_id', currentLocationId).order('name');
+    if (error) { console.error(error); return; }
+
+    const table = document.getElementById('extras-table');
+    table.innerHTML = '<tr><th>Назва</th><th>Ціна, грн</th><th>Активна</th><th></th></tr>';
+    extras.forEach(e => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><input type="text" value="${e.name}" data-field="name" data-id="${e.id}" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;width:100%;"></td>
+        <td><input type="text" value="${e.price}" data-field="price" data-id="${e.id}" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;width:90px;"></td>
+        <td><span class="toggle ${e.is_active ? 'on' : ''}" data-id="${e.id}" data-active="${e.is_active}"></span></td>
+        <td><span style="color:var(--red-600);cursor:pointer;font-size:12.5px;" data-del="${e.id}">Видалити</span></td>
+      `;
+      table.appendChild(row);
+    });
+
+    table.querySelectorAll('input[data-field]').forEach(input => {
+      input.addEventListener('blur', async () => {
+        const field = input.dataset.field;
+        const value = field === 'price' ? parseFloat(input.value) : input.value.trim();
+        if (field === 'price' && isNaN(value)) return;
+        await supabase.from('extra_services').update({ [field]: value }).eq('id', input.dataset.id);
+      });
+    });
+
+    table.querySelectorAll('.toggle').forEach(t => {
+      t.addEventListener('click', async () => {
+        const newActive = !(t.dataset.active === 'true');
+        await supabase.from('extra_services').update({ is_active: newActive }).eq('id', t.dataset.id);
+        t.classList.toggle('on');
+        t.dataset.active = newActive;
+      });
+    });
+
+    table.querySelectorAll('[data-del]').forEach(link => {
+      link.addEventListener('click', async () => {
+        if (!confirm('Видалити цю послугу?')) return;
+        await supabase.from('extra_services').delete().eq('id', link.dataset.del);
+        await loadExtras();
+      });
+    });
+  }
+
+  document.getElementById('add-extra').addEventListener('click', async () => {
+    const name = prompt('Назва додаткової послуги:');
+    if (!name) return;
+    const priceStr = prompt('Ціна, грн:');
+    const price = parseFloat(priceStr);
+    if (isNaN(price)) { alert('Некоректна ціна'); return; }
+    const { error } = await supabase.from('extra_services').insert({
+      location_id: currentLocationId, name, price, is_active: true
+    });
+    if (error) { console.error(error); alert('Помилка додавання'); return; }
+    await loadExtras();
+  });
+
+  // ==== ПЕРЕДОПЛАТА ====
+  async function loadLocationSettings() {
+    const { data, error } = await supabase.from('locations').select('prepayment_amount').eq('id', currentLocationId).single();
+    if (error) { console.error(error); return; }
+    document.getElementById('prepayment-amount').value = data.prepayment_amount ?? 200;
+  }
+
+  document.getElementById('save-prepayment').addEventListener('click', async () => {
+    const amount = parseFloat(document.getElementById('prepayment-amount').value);
+    if (isNaN(amount)) { alert('Некоректна сума'); return; }
+    const { error } = await supabase.from('locations').update({ prepayment_amount: amount }).eq('id', currentLocationId);
+    if (error) { console.error(error); alert('Помилка збереження'); return; }
+    alert('Збережено');
+  });
+</script>
+</body>
+</html>
