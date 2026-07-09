@@ -5,6 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>One Wash — Мій графік</title>
 <link rel="stylesheet" href="style.css">
+<style>
+  .month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .month-nav button{border:1px solid var(--border);background:var(--card);border-radius:7px;width:30px;height:30px;font-size:13px;cursor:pointer;}
+  .weekday-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;font-size:10.5px;color:var(--text-3);text-align:center;}
+  .days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .day-cell{text-align:center;padding:9px 0;border-radius:7px;font-size:12.5px;border:1px solid var(--border);}
+  .day-cell.working{background:var(--green-100);border-color:var(--green-600);color:var(--green-600);font-weight:600;}
+  .day-cell.off{background:var(--border);color:var(--text-2);}
+  .day-cell.today{box-shadow:0 0 0 1.5px var(--cyan-600) inset;}
+  .legend{display:flex;gap:16px;margin-top:14px;font-size:11.5px;color:var(--text-2);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:9px;height:9px;border-radius:3px;display:inline-block;}
+</style>
 </head>
 <body>
 
@@ -38,7 +51,21 @@
       <div class="page-h">Мій графік</div>
       <div class="page-sub">Графік встановлює адміністратор мийки</div>
 
-      <div class="job-card" id="schedule-box"></div>
+      <div class="job-card">
+        <div class="month-nav">
+          <button id="prev-month">←</button>
+          <b id="month-label" style="font-size:14px;">—</b>
+          <button id="next-month">→</button>
+        </div>
+        <div class="weekday-row">
+          <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
+        </div>
+        <div class="days-grid" id="days-grid"></div>
+        <div class="legend">
+          <span><i style="background:var(--green-100);border:1px solid var(--green-600);"></i>Робочий день</span>
+          <span><i style="background:var(--border);"></i>Вихідний</span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -57,37 +84,66 @@
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
 
-  const weekdayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
+  let currentStaff = null;
+  let viewMonth = new Date(); viewMonth.setDate(1);
 
   initPage(async (staff) => {
-    await loadSchedule(staff);
+    currentStaff = staff;
+    await renderMonth();
 
-    // Realtime: якщо адмін змінить графік мийника — сторінка оновиться сама
-    subscribeToTable('schedule-' + staff.id, 'staff_schedule', `staff_id=eq.${staff.id}`, () => {
-      loadSchedule(staff);
+    subscribeToTable('my-schedule-' + staff.id, 'staff_schedule_dates', `staff_id=eq.${staff.id}`, () => {
+      renderMonth();
     });
   });
 
-  async function loadSchedule(staff) {
-    const box = document.getElementById('schedule-box');
+  document.getElementById('prev-month').addEventListener('click', () => {
+    viewMonth.setMonth(viewMonth.getMonth() - 1);
+    renderMonth();
+  });
+  document.getElementById('next-month').addEventListener('click', () => {
+    viewMonth.setMonth(viewMonth.getMonth() + 1);
+    renderMonth();
+  });
 
-    const { data: schedule, error } = await supabase
-      .from('staff_schedule')
+  async function renderMonth() {
+    document.getElementById('month-label').textContent =
+      viewMonth.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
+
+    const year = viewMonth.getFullYear();
+    const month = viewMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = (firstDay.getDay() + 6) % 7;
+
+    const monthStart = firstDay.toISOString().slice(0, 10);
+    const monthEnd = lastDay.toISOString().slice(0, 10);
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const { data: rows, error } = await supabase
+      .from('staff_schedule_dates')
       .select('*')
-      .eq('staff_id', staff.id)
-      .order('weekday');
+      .eq('staff_id', currentStaff.id)
+      .gte('work_date', monthStart)
+      .lte('work_date', monthEnd);
 
-    if (error) { console.error(error); box.innerHTML = '<p>Помилка завантаження графіка</p>'; return; }
+    if (error) console.error(error);
+    const stateByDate = {};
+    (rows || []).forEach(r => { stateByDate[r.work_date] = r.is_working ? 'working' : 'off'; });
 
-    box.innerHTML = '';
-    for (let i = 0; i < 7; i++) {
-      const row = schedule.find(s => s.weekday === i);
-      const isWorking = row ? row.is_working : false;
-      const div = document.createElement('div');
-      div.className = 'sched-day';
-      div.innerHTML = `<div class="d">${weekdayNames[i]}</div>
-                        <span class="${isWorking ? 'sched-on' : 'sched-off'}">${isWorking ? 'Робочий день' : 'Вихідний'}</span>`;
-      box.appendChild(div);
+    const grid = document.getElementById('days-grid');
+    grid.innerHTML = '';
+
+    for (let i = 0; i < startOffset; i++) grid.appendChild(document.createElement('div'));
+
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const dateObj = new Date(year, month, d);
+      const dateStr = dateObj.toISOString().slice(0, 10);
+      const state = stateByDate[dateStr];
+
+      const cell = document.createElement('div');
+      cell.textContent = d;
+      cell.className = 'day-cell' + (state ? ' ' + state : '') + (dateStr === todayStr ? ' today' : '');
+      grid.appendChild(cell);
     }
   }
 </script>
