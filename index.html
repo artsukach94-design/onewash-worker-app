@@ -119,7 +119,7 @@
       actions = `<button class="btn-confirm" data-id="${b.id}">Підтвердити</button>
                  <button class="danger btn-noshow" data-id="${b.id}">Авто не приїхало</button>`;
     } else if (b.status === 'confirmed') {
-      actions = `<button class="primary btn-arrived" data-id="${b.id}">Авто приїхало</button>
+      actions = `<a href="checkin.html?booking=${b.id}" class="primary" style="flex:1;text-align:center;padding:8px 0;border-radius:8px;font-size:12.5px;font-weight:600;background:var(--cyan-500);color:#04202F;">Авто приїхало</a>
                  <button class="danger btn-noshow" data-id="${b.id}">Авто не приїхало</button>`;
     } else if (b.status === 'in_progress') {
       actions = `<button class="primary btn-complete" data-id="${b.id}">Завершити мийку</button>`;
@@ -152,10 +152,6 @@
       }).eq('id', id);
       card.classList.add('fading');
       setTimeout(() => card.remove(), 300);
-    }
-    if (e.target.classList.contains('btn-arrived')) {
-      await supabase.from('bookings').update({ status: 'in_progress' }).eq('id', id);
-      location.reload();
     }
     if (e.target.classList.contains('btn-confirm')) {
       await supabase.from('bookings').update({ status: 'confirmed' }).eq('id', id);
