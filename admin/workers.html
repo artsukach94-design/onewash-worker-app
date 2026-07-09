@@ -73,16 +73,25 @@
   </div>
 </div>
 
-<!-- ПРОСТА МОДАЛКА ГРАФІКА (без бібліотек, звичайний div поверх сторінки) -->
+<!-- МОДАЛКА ГРАФІКА — МІСЯЧНИЙ КАЛЕНДАР -->
 <div id="schedule-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
-  <div style="background:var(--card);border-radius:12px;padding:20px;width:340px;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:360px;">
     <h3 style="margin:0 0 4px;font-size:15px;" id="modal-worker-name">Графік</h3>
-    <p style="margin:0 0 14px;font-size:12.5px;color:var(--text-2);">Позначте робочі дні</p>
-    <div id="modal-days"></div>
-    <div style="display:flex;gap:8px;margin-top:16px;">
-      <button class="btn" style="flex:1;" id="modal-cancel">Скасувати</button>
-      <button class="btn btn-primary" style="flex:1;" id="modal-save">Зберегти</button>
+    <p style="margin:0 0 12px;font-size:12px;color:var(--text-2);">Клік по дню: не задано → робочий → вихідний → не задано</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <button class="btn btn-sm" id="modal-prev-month">←</button>
+      <b style="font-size:13.5px;" id="modal-month-label">—</b>
+      <button class="btn btn-sm" id="modal-next-month">→</button>
     </div>
+    <div id="modal-weekday-row" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;font-size:10.5px;color:var(--text-3);text-align:center;">
+      <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
+    </div>
+    <div id="modal-days-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+    <div style="display:flex;gap:14px;margin-top:14px;font-size:11px;color:var(--text-2);">
+      <span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--green-100);border:1px solid var(--green-600);margin-right:5px;"></i>Робочий</span>
+      <span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--border);margin-right:5px;"></i>Вихідний</span>
+    </div>
+    <button class="btn" style="width:100%;margin-top:14px;" id="modal-close">Закрити</button>
   </div>
 </div>
 
@@ -121,7 +130,7 @@
   async function loadWorkers() {
     const { data: workers, error } = await supabase
       .from('staff')
-      .select('*, staff_schedule(*)')
+      .select('*')
       .eq('location_id', currentLocationId)
       .order('full_name');
 
@@ -137,15 +146,13 @@
     table.innerHTML = '<tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Графік</th><th>Доступ</th></tr>';
     workers.forEach(w => {
       const initials = w.full_name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
-      const workingDays = weekdayNames.filter((_, i) => w.staff_schedule.find(s => s.weekday === i && s.is_working));
-      const scheduleLabel = workingDays.length ? workingDays.join(', ') : 'Не задано';
 
       const row = document.createElement('tr');
       row.innerHTML = `
         <td class="person"><div class="av">${initials}</div>${w.full_name}</td>
         <td>${w.phone || '—'}</td>
         <td><span class="role-badge">${w.role === 'senior_washer' ? 'Старший мийник' : 'Мийник'}</span></td>
-        <td><button class="btn btn-sm schedule-btn" data-id="${w.id}">${scheduleLabel}</button></td>
+        <td><button class="btn btn-sm schedule-btn" data-id="${w.id}" data-name="${w.full_name}">Відкрити календар</button></td>
         <td><span class="toggle ${w.is_active ? 'on' : ''}" data-id="${w.id}" data-active="${w.is_active}"></span></td>
       `;
       table.appendChild(row);
@@ -162,48 +169,119 @@
     });
 
     document.querySelectorAll('.schedule-btn').forEach(btn => {
-      btn.addEventListener('click', () => openScheduleModal(btn.dataset.id));
+      btn.addEventListener('click', () => openScheduleModal(btn.dataset.id, btn.dataset.name));
     });
   }
 
-  // ==== ГРАФІК ====
+  // ==== ГРАФІК (місячний календар по конкретних датах) ====
   const scheduleModal = document.getElementById('schedule-modal');
   let editingWorkerId = null;
+  let modalMonth = new Date(); modalMonth.setDate(1);
 
-  function openScheduleModal(workerId) {
+  function openScheduleModal(workerId, workerName) {
     editingWorkerId = workerId;
-    const worker = workersCache.find(w => w.id === workerId);
-    document.getElementById('modal-worker-name').textContent = 'Графік — ' + worker.full_name;
-
-    const daysBox = document.getElementById('modal-days');
-    daysBox.innerHTML = '';
-    const fullNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
-    fullNames.forEach((name, i) => {
-      const isWorking = !!worker.staff_schedule.find(s => s.weekday === i && s.is_working);
-      const row = document.createElement('label');
-      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:7px 0;font-size:13px;';
-      row.innerHTML = `<span>${name}</span><input type="checkbox" data-weekday="${i}" ${isWorking ? 'checked' : ''} style="width:17px;height:17px;">`;
-      daysBox.appendChild(row);
-    });
-
+    modalMonth = new Date(); modalMonth.setDate(1);
+    document.getElementById('modal-worker-name').textContent = 'Графік — ' + workerName;
     scheduleModal.style.display = 'flex';
+    renderModalMonth();
   }
 
-  document.getElementById('modal-cancel').addEventListener('click', () => scheduleModal.style.display = 'none');
-
-  document.getElementById('modal-save').addEventListener('click', async () => {
-    const checkboxes = [...document.querySelectorAll('#modal-days input[type=checkbox]')];
-    for (const cb of checkboxes) {
-      const weekday = parseInt(cb.dataset.weekday, 10);
-      const isWorking = cb.checked;
-      const { error } = await supabase
-        .from('staff_schedule')
-        .upsert({ staff_id: editingWorkerId, weekday, is_working: isWorking }, { onConflict: 'staff_id,weekday' });
-      if (error) console.error(error);
-    }
-    scheduleModal.style.display = 'none';
-    await loadWorkers();
+  document.getElementById('modal-close').addEventListener('click', () => scheduleModal.style.display = 'none');
+  document.getElementById('modal-prev-month').addEventListener('click', () => {
+    modalMonth.setMonth(modalMonth.getMonth() - 1);
+    renderModalMonth();
   });
+  document.getElementById('modal-next-month').addEventListener('click', () => {
+    modalMonth.setMonth(modalMonth.getMonth() + 1);
+    renderModalMonth();
+  });
+
+  async function renderModalMonth() {
+    document.getElementById('modal-month-label').textContent =
+      modalMonth.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
+
+    const year = modalMonth.getFullYear();
+    const month = modalMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = (firstDay.getDay() + 6) % 7; // понеділок = 0
+
+    const monthStart = firstDay.toISOString().slice(0, 10);
+    const monthEnd = lastDay.toISOString().slice(0, 10);
+
+    const { data: rows, error } = await supabase
+      .from('staff_schedule_dates')
+      .select('*')
+      .eq('staff_id', editingWorkerId)
+      .gte('work_date', monthStart)
+      .lte('work_date', monthEnd);
+
+    if (error) console.error(error);
+    const stateByDate = {};
+    (rows || []).forEach(r => { stateByDate[r.work_date] = r.is_working ? 'working' : 'off'; });
+
+    const grid = document.getElementById('modal-days-grid');
+    grid.innerHTML = '';
+
+    for (let i = 0; i < startOffset; i++) {
+      grid.appendChild(document.createElement('div'));
+    }
+
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const dateObj = new Date(year, month, d);
+      const dateStr = dateObj.toISOString().slice(0, 10);
+      const state = stateByDate[dateStr] || 'none';
+
+      const cell = document.createElement('div');
+      cell.textContent = d;
+      cell.dataset.date = dateStr;
+      cell.dataset.state = state;
+      cell.style.cssText = 'text-align:center;padding:7px 0;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);';
+      applyCellStyle(cell, state);
+
+      cell.addEventListener('click', () => cycleDay(cell));
+      grid.appendChild(cell);
+    }
+  }
+
+  function applyCellStyle(cell, state) {
+    if (state === 'working') {
+      cell.style.background = 'var(--green-100)';
+      cell.style.borderColor = 'var(--green-600)';
+      cell.style.color = 'var(--green-600)';
+      cell.style.fontWeight = '600';
+    } else if (state === 'off') {
+      cell.style.background = 'var(--border)';
+      cell.style.borderColor = 'var(--border)';
+      cell.style.color = 'var(--text-2)';
+      cell.style.fontWeight = '400';
+    } else {
+      cell.style.background = 'transparent';
+      cell.style.borderColor = 'var(--border)';
+      cell.style.color = 'var(--text-1)';
+      cell.style.fontWeight = '400';
+    }
+  }
+
+  async function cycleDay(cell) {
+    const dateStr = cell.dataset.date;
+    const current = cell.dataset.state;
+
+    if (current === 'none') {
+      await supabase.from('staff_schedule_dates')
+        .upsert({ staff_id: editingWorkerId, work_date: dateStr, is_working: true }, { onConflict: 'staff_id,work_date' });
+      cell.dataset.state = 'working';
+    } else if (current === 'working') {
+      await supabase.from('staff_schedule_dates')
+        .upsert({ staff_id: editingWorkerId, work_date: dateStr, is_working: false }, { onConflict: 'staff_id,work_date' });
+      cell.dataset.state = 'off';
+    } else {
+      await supabase.from('staff_schedule_dates')
+        .delete().eq('staff_id', editingWorkerId).eq('work_date', dateStr);
+      cell.dataset.state = 'none';
+    }
+    applyCellStyle(cell, cell.dataset.state);
+  }
 
   // ==== ЗАПРОШЕННЯ МИЙНИКА ====
   const inviteModal = document.getElementById('invite-modal');
