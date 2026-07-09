@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WashOS — Мийники</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>WashOS</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">WS</div>
+        <div class="brand-text"><b>WashOS</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item active" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Мийники</h1><div class="sub">Доступи та графіки роботи</div></div>
+      </div>
+      <div class="content" id="page-content">
+
+        <div class="panel">
+          <div class="panel-head"><h3>Список співробітників</h3><button class="btn btn-primary btn-sm" id="invite-btn">+ Запросити мийника</button></div>
+          <div class="panel-body" style="padding:0;">
+            <table id="workers-table">
+              <tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Графік</th><th>Доступ</th></tr>
+              <tr><td colspan="5" class="empty-state">Завантаження...</td></tr>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ПРОСТА МОДАЛКА ГРАФІКА (без бібліотек, звичайний div поверх сторінки) -->
+<div id="schedule-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:340px;">
+    <h3 style="margin:0 0 4px;font-size:15px;" id="modal-worker-name">Графік</h3>
+    <p style="margin:0 0 14px;font-size:12.5px;color:var(--text-2);">Позначте робочі дні</p>
+    <div id="modal-days"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn" style="flex:1;" id="modal-cancel">Скасувати</button>
+      <button class="btn btn-primary" style="flex:1;" id="modal-save">Зберегти</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА ЗАПРОШЕННЯ МИЙНИКА -->
+<div id="invite-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:340px;">
+    <h3 style="margin:0 0 4px;font-size:15px;">Новий мийник</h3>
+    <p style="margin:0 0 14px;font-size:12.5px;color:var(--text-2);">Спочатку створіть користувача в Supabase → Authentication, потім вставте його email і User UID сюди</p>
+    <div class="form-group"><label>Повне ім'я</label><input type="text" id="invite-name" placeholder="Іван Іваненко"></div>
+    <div class="form-group"><label>Телефон</label><input type="tel" id="invite-phone" placeholder="+380971234567"></div>
+    <div class="form-group"><label>User UID (з Supabase Auth)</label><input type="text" id="invite-uid" placeholder="a1b2c3d4-..."></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn" style="flex:1;" id="invite-cancel">Скасувати</button>
+      <button class="btn btn-primary" style="flex:1;" id="invite-save">Додати</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  const weekdayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+  let currentLocationId = null;
+  let workersCache = [];
+
+  initAdminPage(async (admin, locations, locationId) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+    currentLocationId = locationId;
+    await loadWorkers();
+  });
+
+  async function loadWorkers() {
+    const { data: workers, error } = await supabase
+      .from('staff')
+      .select('*, staff_schedule(*)')
+      .eq('location_id', currentLocationId)
+      .order('full_name');
+
+    if (error) { console.error(error); return; }
+    workersCache = workers;
+
+    const table = document.getElementById('workers-table');
+    if (workers.length === 0) {
+      table.innerHTML = '<tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Графік</th><th>Доступ</th></tr><tr><td colspan="5" class="empty-state">Мийників ще немає</td></tr>';
+      return;
+    }
+
+    table.innerHTML = '<tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Графік</th><th>Доступ</th></tr>';
+    workers.forEach(w => {
+      const initials = w.full_name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+      const workingDays = weekdayNames.filter((_, i) => w.staff_schedule.find(s => s.weekday === i && s.is_working));
+      const scheduleLabel = workingDays.length ? workingDays.join(', ') : 'Не задано';
+
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td class="person"><div class="av">${initials}</div>${w.full_name}</td>
+        <td>${w.phone || '—'}</td>
+        <td><span class="role-badge">${w.role === 'senior_washer' ? 'Старший мийник' : 'Мийник'}</span></td>
+        <td><button class="btn btn-sm schedule-btn" data-id="${w.id}">${scheduleLabel}</button></td>
+        <td><span class="toggle ${w.is_active ? 'on' : ''}" data-id="${w.id}" data-active="${w.is_active}"></span></td>
+      `;
+      table.appendChild(row);
+    });
+
+    document.querySelectorAll('.toggle').forEach(t => {
+      t.addEventListener('click', async () => {
+        const newActive = !(t.dataset.active === 'true');
+        const { error } = await supabase.from('staff').update({ is_active: newActive }).eq('id', t.dataset.id);
+        if (error) { console.error(error); alert('Не вдалося змінити доступ'); return; }
+        t.classList.toggle('on');
+        t.dataset.active = newActive;
+      });
+    });
+
+    document.querySelectorAll('.schedule-btn').forEach(btn => {
+      btn.addEventListener('click', () => openScheduleModal(btn.dataset.id));
+    });
+  }
+
+  // ==== ГРАФІК ====
+  const scheduleModal = document.getElementById('schedule-modal');
+  let editingWorkerId = null;
+
+  function openScheduleModal(workerId) {
+    editingWorkerId = workerId;
+    const worker = workersCache.find(w => w.id === workerId);
+    document.getElementById('modal-worker-name').textContent = 'Графік — ' + worker.full_name;
+
+    const daysBox = document.getElementById('modal-days');
+    daysBox.innerHTML = '';
+    const fullNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
+    fullNames.forEach((name, i) => {
+      const isWorking = !!worker.staff_schedule.find(s => s.weekday === i && s.is_working);
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:7px 0;font-size:13px;';
+      row.innerHTML = `<span>${name}</span><input type="checkbox" data-weekday="${i}" ${isWorking ? 'checked' : ''} style="width:17px;height:17px;">`;
+      daysBox.appendChild(row);
+    });
+
+    scheduleModal.style.display = 'flex';
+  }
+
+  document.getElementById('modal-cancel').addEventListener('click', () => scheduleModal.style.display = 'none');
+
+  document.getElementById('modal-save').addEventListener('click', async () => {
+    const checkboxes = [...document.querySelectorAll('#modal-days input[type=checkbox]')];
+    for (const cb of checkboxes) {
+      const weekday = parseInt(cb.dataset.weekday, 10);
+      const isWorking = cb.checked;
+      const { error } = await supabase
+        .from('staff_schedule')
+        .upsert({ staff_id: editingWorkerId, weekday, is_working: isWorking }, { onConflict: 'staff_id,weekday' });
+      if (error) console.error(error);
+    }
+    scheduleModal.style.display = 'none';
+    await loadWorkers();
+  });
+
+  // ==== ЗАПРОШЕННЯ МИЙНИКА ====
+  const inviteModal = document.getElementById('invite-modal');
+  document.getElementById('invite-btn').addEventListener('click', () => inviteModal.style.display = 'flex');
+  document.getElementById('invite-cancel').addEventListener('click', () => inviteModal.style.display = 'none');
+
+  document.getElementById('invite-save').addEventListener('click', async () => {
+    const fullName = document.getElementById('invite-name').value.trim();
+    const phone = document.getElementById('invite-phone').value.trim();
+    const uid = document.getElementById('invite-uid').value.trim();
+
+    if (!fullName || !uid) {
+      alert('Заповніть принаймні ім\'я і User UID');
+      return;
+    }
+
+    const { error } = await supabase.from('staff').insert({
+      auth_user_id: uid,
+      full_name: fullName,
+      phone,
+      location_id: currentLocationId,
+      role: 'washer',
+      is_active: true
+    });
+
+    if (error) { console.error(error); alert('Помилка додавання мийника'); return; }
+
+    inviteModal.style.display = 'none';
+    document.getElementById('invite-name').value = '';
+    document.getElementById('invite-phone').value = '';
+    document.getElementById('invite-uid').value = '';
+    await loadWorkers();
+  });
+</script>
+</body>
+</html>
