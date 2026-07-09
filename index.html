@@ -1,7 +1,167 @@
-<script type="module" src="app.js"></script>
-const { data: { session } } = await supabase.auth.getSession()
-if (!session) {
-  // показати форму логіну
-} else {
-  loadToday()
-}
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>One Wash — Сьогодні</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ФОРМА ЛОГІНУ (показується, якщо мийник не залогінений) -->
+  <div id="login-view" style="display:none;">
+    <div class="login-box">
+      <h1>One Wash</h1>
+      <p>Вхід для мийників</p>
+      <form id="login-form">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="roman@test.com" required>
+        </div>
+        <div class="form-group">
+          <label>Пароль</label>
+          <input type="password" id="login-password" required>
+        </div>
+        <button type="submit" class="submit-btn">Увійти</button>
+        <div class="login-error" id="login-error"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ОСНОВНИЙ ЕКРАН -->
+  <div id="app-view" style="display:none;">
+    <div class="topbar">
+      <div class="topbar-row">
+        <div class="who">
+          <div class="avatar" id="staff-initials">--</div>
+          <div><b id="staff-name">—</b><span>Мийник · One Wash</span></div>
+        </div>
+        <button class="logout-btn" id="logout-btn">Вийти</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="page-h">Сьогодні</div>
+      <div class="page-sub" id="page-sub">Завантаження...</div>
+
+      <div id="jobs-list"></div>
+    </div>
+  </div>
+
+  <!-- НИЖНЄ МЕНЮ (однакове на всіх сторінках) -->
+  <div class="bottom-nav">
+    <a class="bn-item active" href="index.html"><span class="ic">◧</span>Сьогодні</a>
+    <a class="bn-item" href="checkin.html"><span class="ic">＋</span>Реєстрація</a>
+    <a class="bn-item" href="calendar.html"><span class="ic">▦</span>Календар</a>
+    <a class="bn-item" href="schedule.html"><span class="ic">📅</span>Мій графік</a>
+  </div>
+
+</div>
+
+<script type="module">
+  import { supabase, initPage, wireLoginForm, logout, formatTime } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  initPage(async (staff) => {
+    await loadToday(staff);
+  });
+
+  async function loadToday(staff) {
+    const jobsList = document.getElementById('jobs-list');
+    const pageSub = document.getElementById('page-sub');
+
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+
+    const { data: bookings, error } = await supabase
+      .from('bookings')
+      .select('*, cars(*), clients(*), wash_types(*)')
+      .eq('staff_id', staff.id)
+      .gte('scheduled_at', startOfDay.toISOString())
+      .lte('scheduled_at', endOfDay.toISOString())
+      .in('status', ['pending', 'confirmed', 'in_progress'])
+      .order('scheduled_at');
+
+    if (error) {
+      pageSub.textContent = 'Помилка завантаження записів';
+      console.error(error);
+      return;
+    }
+
+    if (bookings.length === 0) {
+      pageSub.textContent = 'На сьогодні записів немає';
+      jobsList.innerHTML = '<div class="empty-state">Записів на сьогодні немає</div>';
+      return;
+    }
+
+    pageSub.textContent = `У вас ${bookings.length} записів сьогодні`;
+    jobsList.innerHTML = '';
+    bookings.forEach(b => jobsList.appendChild(renderJobCard(b)));
+  }
+
+  function renderJobCard(b) {
+    const card = document.createElement('div');
+    card.className = 'job-card';
+    card.id = 'job-' + b.id;
+
+    const statusLabel = { pending: 'Не підтверджено', confirmed: 'Заброньовано', in_progress: 'В процесі' }[b.status] || b.status;
+    const pillClass = { pending: 'pending', confirmed: 'confirmed', in_progress: 'progress' }[b.status] || '';
+    const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.cars.plate || ''}` : 'Авто не вказано';
+    const clientLabel = b.clients?.full_name || b.clients?.phone || '';
+    const washLabel = b.wash_types?.name || '';
+
+    let actions = '';
+    if (b.status === 'pending') {
+      actions = `<button class="btn-confirm" data-id="${b.id}">Підтвердити</button>
+                 <button class="danger btn-noshow" data-id="${b.id}">Авто не приїхало</button>`;
+    } else if (b.status === 'confirmed') {
+      actions = `<button class="primary btn-arrived" data-id="${b.id}">Авто приїхало</button>
+                 <button class="danger btn-noshow" data-id="${b.id}">Авто не приїхало</button>`;
+    } else if (b.status === 'in_progress') {
+      actions = `<button class="primary btn-complete" data-id="${b.id}">Завершити мийку</button>`;
+    }
+
+    card.innerHTML = `
+      <div class="job-top"><span class="job-time">${formatTime(b.scheduled_at)}</span><span class="pill ${pillClass}">${statusLabel}</span></div>
+      <p class="job-car">${carLabel}</p>
+      <div class="job-meta">${clientLabel} · ${washLabel}</div>
+      <div class="job-actions">${actions}</div>
+    `;
+    return card;
+  }
+
+  // Обробка кліків на кнопках усередині карток (делегування подій)
+  document.getElementById('jobs-list').addEventListener('click', async (e) => {
+    const id = e.target.dataset.id;
+    if (!id) return;
+    const card = document.getElementById('job-' + id);
+
+    if (e.target.classList.contains('btn-noshow')) {
+      await supabase.from('bookings').update({ status: 'no_show' }).eq('id', id);
+      card.classList.add('fading');
+      setTimeout(() => card.remove(), 300);
+    }
+    if (e.target.classList.contains('btn-complete')) {
+      await supabase.from('bookings').update({
+        status: 'done',
+        completed_at: new Date().toISOString()
+      }).eq('id', id);
+      card.classList.add('fading');
+      setTimeout(() => card.remove(), 300);
+    }
+    if (e.target.classList.contains('btn-arrived')) {
+      await supabase.from('bookings').update({ status: 'in_progress' }).eq('id', id);
+      location.reload();
+    }
+    if (e.target.classList.contains('btn-confirm')) {
+      await supabase.from('bookings').update({ status: 'confirmed' }).eq('id', id);
+      location.reload();
+    }
+  });
+</script>
+</body>
+</html>
