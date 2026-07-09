@@ -52,7 +52,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initPage, wireLoginForm, logout } from './app.js';
+  import { supabase, initPage, wireLoginForm, logout, subscribeToTable } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -61,6 +61,11 @@
 
   initPage(async (staff) => {
     await loadSchedule(staff);
+
+    // Realtime: якщо адмін змінить графік мийника — сторінка оновиться сама
+    subscribeToTable('schedule-' + staff.id, 'staff_schedule', `staff_id=eq.${staff.id}`, () => {
+      loadSchedule(staff);
+    });
   });
 
   async function loadSchedule(staff) {
