@@ -61,13 +61,19 @@
 </div>
 
 <script type="module">
-  import { supabase, initPage, wireLoginForm, logout, formatTime } from './app.js';
+  import { supabase, initPage, wireLoginForm, logout, formatTime, subscribeToTable } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
 
   initPage(async (staff) => {
     await loadToday(staff);
+
+    // Realtime: якщо адмін або сайт мийки створить/змінить запис цього мийника —
+    // список оновиться сам, без перезавантаження сторінки
+    subscribeToTable('bookings-today-' + staff.id, 'bookings', `staff_id=eq.${staff.id}`, () => {
+      loadToday(staff);
+    });
   });
 
   async function loadToday(staff) {
