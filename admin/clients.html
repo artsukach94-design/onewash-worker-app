@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WashOS — Клієнти</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>WashOS</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">WS</div>
+        <div class="brand-text"><b>WashOS</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item active" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Клієнти та авто</h1><div class="sub">База клієнтів цієї мийки</div></div>
+      </div>
+      <div class="content" id="page-content">
+        <div class="panel">
+          <div class="panel-head"><h3>Список клієнтів</h3></div>
+          <div class="panel-body" style="padding:0;">
+            <table id="clients-table">
+              <tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th></tr>
+              <tr><td colspan="5" class="empty-state">Завантаження...</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout, formatTime } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentLocationId = null;
+
+  initAdminPage(async (admin, locations, locationId) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+    currentLocationId = locationId;
+    await loadClients();
+  });
+
+  async function loadClients() {
+    const { data: clients, error } = await supabase
+      .from('clients')
+      .select('*, cars(*)')
+      .eq('location_id', currentLocationId)
+      .order('created_at', { ascending: false });
+
+    if (error) { console.error(error); return; }
+
+    const { data: bookings } = await supabase
+      .from('bookings')
+      .select('client_id, scheduled_at, status')
+      .eq('location_id', currentLocationId);
+
+    const statsByClient = {};
+    (bookings || []).forEach(b => {
+      if (!b.client_id) return;
+      if (!statsByClient[b.client_id]) statsByClient[b.client_id] = { done: 0, last: null };
+      if (b.status === 'done') statsByClient[b.client_id].done++;
+      if (!statsByClient[b.client_id].last || new Date(b.scheduled_at) > new Date(statsByClient[b.client_id].last)) {
+        statsByClient[b.client_id].last = b.scheduled_at;
+      }
+    });
+
+    const table = document.getElementById('clients-table');
+    if (clients.length === 0) {
+      table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th></tr><tr><td colspan="5" class="empty-state">Клієнтів ще немає</td></tr>';
+      return;
+    }
+
+    table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th></tr>';
+    clients.forEach(c => {
+      const stats = statsByClient[c.id] || { done: 0, last: null };
+      const carsLabel = c.cars.length
+        ? c.cars.map(car => `${car.brand_model || 'Авто'} (${car.plate || '—'})`).join(', ')
+        : '—';
+      const lastVisit = stats.last
+        ? new Date(stats.last).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
+        : '—';
+
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td class="person"><div class="av">${(c.full_name || c.phone || '?')[0].toUpperCase()}</div>
+          <input type="text" value="${c.full_name || ''}" placeholder="Без імені" data-id="${c.id}" class="name-input" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;"></td>
+        <td>${c.phone || '—'}</td>
+        <td>${carsLabel}</td>
+        <td>${lastVisit}</td>
+        <td>${stats.done}</td>
+      `;
+      table.appendChild(row);
+    });
+
+    table.querySelectorAll('.name-input').forEach(input => {
+      input.addEventListener('blur', async () => {
+        await supabase.from('clients').update({ full_name: input.value.trim() }).eq('id', input.dataset.id);
+      });
+    });
+  }
+</script>
+</body>
+</html>
