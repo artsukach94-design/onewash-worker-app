@@ -85,7 +85,10 @@
     <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="m-phone" placeholder="+380671112233"></div>
     <div class="form-group"><label>Ім'я клієнта (необов'язково)</label><input type="text" id="m-client-name"></div>
     <div class="form-group"><label>Номерний знак</label><input type="text" id="m-plate"></div>
-    <div class="form-group"><label>Марка і модель</label><input type="text" id="m-brand"></div>
+    <div class="form-group"><label>Марка</label><select id="m-brand-select"></select></div>
+    <div class="form-group" id="m-brand-other-wrap" style="display:none;"><label>Введіть марку</label><input type="text" id="m-brand-other"></div>
+    <div class="form-group"><label>Модель</label><select id="m-model-select"></select></div>
+    <div class="form-group" id="m-model-other-wrap" style="display:none;"><label>Введіть модель</label><input type="text" id="m-model-other"></div>
     <div class="form-group"><label>Тип авто</label><select id="m-vtype"></select></div>
     <div class="form-group"><label>Тип послуги</label><select id="m-washtype"></select></div>
 
@@ -105,6 +108,80 @@
   let currentLocationId = null;
   let selectedDate = new Date(); selectedDate.setHours(0, 0, 0, 0);
   let staffList = [], vehicleTypes = [], washTypes = [];
+
+  // Популярні марки та моделі авто — з опцією "Інша", якщо потрібної немає в списку
+  const CAR_BRANDS = {
+    'Toyota': ['Camry', 'Corolla', 'RAV4', 'Land Cruiser', 'Yaris'],
+    'Volkswagen': ['Golf', 'Passat', 'Tiguan', 'Polo', 'Jetta'],
+    'BMW': ['3 Series', '5 Series', 'X5', 'X3', '7 Series'],
+    'Mercedes-Benz': ['C-Class', 'E-Class', 'GLE', 'S-Class', 'A-Class'],
+    'Audi': ['A4', 'A6', 'Q5', 'Q7', 'A3'],
+    'Skoda': ['Octavia', 'Superb', 'Kodiaq', 'Fabia', 'Karoq'],
+    'Renault': ['Duster', 'Megane', 'Logan', 'Kadjar', 'Clio'],
+    'Hyundai': ['Tucson', 'Elantra', 'Santa Fe', 'i30', 'Sonata'],
+    'Kia': ['Sportage', 'Rio', 'Sorento', 'Ceed', 'Optima'],
+    'Nissan': ['Qashqai', 'X-Trail', 'Juke', 'Leaf', 'Almera'],
+    'Ford': ['Focus', 'Fusion', 'Kuga', 'Explorer', 'Fiesta'],
+    'Opel': ['Astra', 'Insignia', 'Corsa', 'Mokka', 'Vectra'],
+    'Peugeot': ['308', '3008', '508', '2008', '208'],
+    'Chevrolet': ['Aveo', 'Cruze', 'Lacetti', 'Captiva', 'Niva'],
+    'Honda': ['Civic', 'CR-V', 'Accord', 'HR-V', 'Pilot'],
+    'Mazda': ['3', '6', 'CX-5', 'CX-3', 'CX-9'],
+    'Mitsubishi': ['Outlander', 'ASX', 'Lancer', 'Pajero', 'Eclipse Cross'],
+    'Volvo': ['XC60', 'XC90', 'S60', 'V40', 'XC40'],
+    'Lexus': ['RX', 'NX', 'ES', 'GX', 'LX'],
+    'Land Rover': ['Range Rover', 'Discovery', 'Defender', 'Evoque'],
+    'Jeep': ['Grand Cherokee', 'Compass', 'Wrangler', 'Renegade'],
+    'Subaru': ['Forester', 'Outback', 'Impreza', 'XV'],
+    'Fiat': ['Tipo', '500', 'Panda', 'Doblo'],
+    'Citroen': ['C4', 'C3', 'Berlingo', 'C5 Aircross'],
+    'Mini': ['Cooper', 'Countryman', 'Clubman'],
+    'Porsche': ['Cayenne', 'Macan', 'Panamera', '911'],
+    'Jaguar': ['XF', 'XE', 'F-Pace', 'E-Pace'],
+    'Suzuki': ['Vitara', 'SX4', 'Swift', 'Jimny'],
+    'Dacia': ['Duster', 'Logan', 'Sandero'],
+    'Chery': ['Tiggo 7', 'Tiggo 4', 'Tiggo 8'],
+    'Geely': ['Coolray', 'Atlas', 'Emgrand']
+  };
+
+  function initBrandModelSelects(prefix) {
+    const brandSelect = document.getElementById(prefix + '-brand-select');
+    const brandOtherWrap = document.getElementById(prefix + '-brand-other-wrap');
+    const modelSelect = document.getElementById(prefix + '-model-select');
+    const modelOtherWrap = document.getElementById(prefix + '-model-other-wrap');
+
+    brandSelect.innerHTML = Object.keys(CAR_BRANDS).sort().map(b => `<option value="${b}">${b}</option>`).join('')
+      + '<option value="__other__">Інша марка…</option>';
+
+    function fillModels(brand) {
+      const models = CAR_BRANDS[brand] || [];
+      modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('')
+        + '<option value="__other__">Інша модель…</option>';
+      modelOtherWrap.style.display = 'none';
+    }
+    fillModels(brandSelect.value);
+
+    brandSelect.addEventListener('change', () => {
+      brandOtherWrap.style.display = brandSelect.value === '__other__' ? 'block' : 'none';
+      if (brandSelect.value !== '__other__') fillModels(brandSelect.value);
+      else { modelSelect.innerHTML = '<option value="__other__">Інша модель…</option>'; modelOtherWrap.style.display = 'block'; }
+    });
+    modelSelect.addEventListener('change', () => {
+      modelOtherWrap.style.display = modelSelect.value === '__other__' ? 'block' : 'none';
+    });
+  }
+
+  function getBrandModelValue(prefix) {
+    const brandSelect = document.getElementById(prefix + '-brand-select');
+    const modelSelect = document.getElementById(prefix + '-model-select');
+    const brand = brandSelect.value === '__other__'
+      ? document.getElementById(prefix + '-brand-other').value.trim()
+      : brandSelect.value;
+    const model = modelSelect.value === '__other__'
+      ? document.getElementById(prefix + '-model-other').value.trim()
+      : modelSelect.value;
+    return [brand, model].filter(Boolean).join(' ');
+  }
 
   initAdminPage(async (admin, locations, locationId) => {
     if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
@@ -137,6 +214,7 @@
     document.getElementById('m-staff').innerHTML = staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
     document.getElementById('m-vtype').innerHTML = vehicleTypes.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
     document.getElementById('m-washtype').innerHTML = washTypes.map(w => `<option value="${w.id}">${w.name}</option>`).join('');
+    initBrandModelSelects('m');
   }
 
   async function loadDay() {
@@ -204,7 +282,7 @@
     const phone = document.getElementById('m-phone').value.trim();
     const clientName = document.getElementById('m-client-name').value.trim();
     const plate = document.getElementById('m-plate').value.trim();
-    const brand = document.getElementById('m-brand').value.trim();
+    const brand = getBrandModelValue('m');
     const vtypeId = document.getElementById('m-vtype').value;
     const washTypeId = document.getElementById('m-washtype').value;
 
@@ -253,7 +331,9 @@
       if (bErr) throw bErr;
 
       modal.style.display = 'none';
-      ['m-time', 'm-phone', 'm-client-name', 'm-plate', 'm-brand'].forEach(id => document.getElementById(id).value = '');
+      ['m-time', 'm-phone', 'm-client-name', 'm-plate', 'm-brand-other', 'm-model-other'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('m-brand-other-wrap').style.display = 'none';
+      document.getElementById('m-model-other-wrap').style.display = 'none';
       await loadDay();
 
     } catch (err) {
