@@ -1,1 +1,300 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>One Wash — Реєстрація авто</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
 
+<div class="shell">
+
+  <div id="login-view" style="display:none;">
+    <div class="login-box">
+      <h1>One Wash</h1>
+      <p>Вхід для мийників</p>
+      <form id="login-form">
+        <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+        <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+        <button type="submit" class="submit-btn">Увійти</button>
+        <div class="login-error" id="login-error"></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-view" style="display:none;">
+    <div class="topbar">
+      <div class="topbar-row">
+        <div class="who">
+          <div class="avatar" id="staff-initials">--</div>
+          <div><b id="staff-name">—</b><span>Мийник · One Wash</span></div>
+        </div>
+        <button class="logout-btn" id="logout-btn">Вийти</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="page-h">Авто приїхало</div>
+      <div class="page-sub">Заповніть дані перед миттям</div>
+
+      <form id="checkin-form">
+        <div class="form-row">
+          <div class="form-group"><label>Номерний знак</label><input type="text" id="plate" placeholder="ТН 1234 АА" required></div>
+          <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="phone" placeholder="+380671112233" required></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Марка і модель</label><input type="text" id="brand-model" placeholder="Toyota Camry"></div>
+          <div class="form-group"><label>Колір</label><input type="text" id="color" placeholder="Білий"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Тип авто</label>
+          <div class="vtype-grid" id="vtype-box"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Тип послуги</label>
+          <div class="service-opts" id="washtype-box"></div>
+        </div>
+
+        <div class="section-label">Додаткові послуги</div>
+        <div class="job-card" id="extras-box" style="padding:2px 14px;"></div>
+
+        <div class="total-box"><div class="t">Загальна вартість</div><div class="v" id="total-price">0 грн</div></div>
+
+        <div class="form-group"><label>Нотатки</label><textarea id="notes" placeholder="Плями на сидінні, подряпина на бампері..."></textarea></div>
+
+        <div class="section-label">Фото авто</div>
+        <div class="photo-row">
+          <div class="photo-slot">
+            <label>Перед <span class="req">обов'язково</span></label>
+            <input type="file" id="photo-front" accept="image/*" capture="environment" required>
+            <img class="preview" id="preview-front">
+          </div>
+          <div class="photo-slot">
+            <label>Зад <span class="opt">за бажанням</span></label>
+            <input type="file" id="photo-back" accept="image/*" capture="environment">
+            <img class="preview" id="preview-back">
+          </div>
+          <div class="photo-slot">
+            <label>Ліво <span class="opt">за бажанням</span></label>
+            <input type="file" id="photo-left" accept="image/*" capture="environment">
+            <img class="preview" id="preview-left">
+          </div>
+          <div class="photo-slot">
+            <label>Право <span class="opt">за бажанням</span></label>
+            <input type="file" id="photo-right" accept="image/*" capture="environment">
+            <img class="preview" id="preview-right">
+          </div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submit-btn">Зареєструвати та почати мийку</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <a class="bn-item" href="index.html"><span class="ic">◧</span>Сьогодні</a>
+    <a class="bn-item active" href="checkin.html"><span class="ic">＋</span>Реєстрація</a>
+    <a class="bn-item" href="calendar.html"><span class="ic">▦</span>Календар</a>
+    <a class="bn-item" href="schedule.html"><span class="ic">📅</span>Мій графік</a>
+  </div>
+
+</div>
+
+<script type="module">
+  import { supabase, initPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentStaff = null;
+  let vehicleTypes = [], washTypes = [], washPrices = [], extraServices = [];
+
+  initPage(async (staff) => {
+    currentStaff = staff;
+    await loadOptions();
+  });
+
+  async function loadOptions() {
+    const [{ data: vt }, { data: wt }, { data: wp }, { data: ex }] = await Promise.all([
+      supabase.from('vehicle_types').select('*').eq('location_id', currentStaff.location_id).order('sort_order'),
+      supabase.from('wash_types').select('*').eq('location_id', currentStaff.location_id).order('sort_order'),
+      supabase.from('wash_prices').select('*'),
+      supabase.from('extra_services').select('*').eq('location_id', currentStaff.location_id).eq('is_active', true)
+    ]);
+
+    vehicleTypes = vt || [];
+    washTypes = wt || [];
+    washPrices = wp || [];
+    extraServices = ex || [];
+
+    renderChips('vtype-box', vehicleTypes, 'vtype-chip');
+    renderChips('washtype-box', washTypes, 'service-chip');
+    renderExtras();
+    updateTotal();
+  }
+
+  function renderChips(containerId, items, className) {
+    const box = document.getElementById(containerId);
+    box.innerHTML = '';
+    items.forEach((item, i) => {
+      const chip = document.createElement('div');
+      chip.className = className + (i === 0 ? ' sel' : '');
+      chip.textContent = item.name;
+      chip.dataset.id = item.id;
+      chip.addEventListener('click', () => {
+        box.querySelectorAll('.' + className.split(' ')[0]).forEach(c => c.classList.remove('sel'));
+        chip.classList.add('sel');
+        updateTotal();
+      });
+      box.appendChild(chip);
+    });
+  }
+
+  function renderExtras() {
+    const box = document.getElementById('extras-box');
+    box.innerHTML = '';
+    if (extraServices.length === 0) {
+      box.innerHTML = '<p style="font-size:12px;color:var(--text-2);padding:10px 0;">Додаткові послуги не налаштовані адміністратором</p>';
+      return;
+    }
+    extraServices.forEach(e => {
+      const row = document.createElement('label');
+      row.className = 'extra-row';
+      row.innerHTML = `<input type="checkbox" data-price="${e.price}" data-id="${e.id}"><span class="name">${e.name}</span><span class="price">${e.price} грн</span>`;
+      row.querySelector('input').addEventListener('change', updateTotal);
+      box.appendChild(row);
+    });
+  }
+
+  function updateTotal() {
+    const vChip = document.querySelector('#vtype-box .sel');
+    const wChip = document.querySelector('#washtype-box .sel');
+    if (!vChip || !wChip) return 0;
+
+    const priceRow = washPrices.find(p => p.wash_type_id === wChip.dataset.id && p.vehicle_type_id === vChip.dataset.id);
+    let total = priceRow ? Number(priceRow.price) : 0;
+
+    document.querySelectorAll('#extras-box input:checked').forEach(cb => {
+      total += Number(cb.dataset.price);
+    });
+
+    document.getElementById('total-price').textContent = total.toLocaleString('uk-UA') + ' грн';
+    return total;
+  }
+
+  // Показ прев'ю фото одразу після вибору файлу
+  ['front', 'back', 'left', 'right'].forEach(angle => {
+    document.getElementById('photo-' + angle).addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      const preview = document.getElementById('preview-' + angle);
+      if (!file) { preview.style.display = 'none'; return; }
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = 'block';
+    });
+  });
+
+  document.getElementById('checkin-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitBtn = document.getElementById('submit-btn');
+    const frontFile = document.getElementById('photo-front').files[0];
+
+    if (!frontFile) {
+      alert('Додайте фото переду авто — це обов\'язково');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Зберігаємо...';
+
+    const plate = document.getElementById('plate').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const brandModel = document.getElementById('brand-model').value.trim();
+    const color = document.getElementById('color').value.trim();
+    const notes = document.getElementById('notes').value.trim();
+    const total = updateTotal();
+    const vehicleTypeId = document.querySelector('#vtype-box .sel').dataset.id;
+    const washTypeId = document.querySelector('#washtype-box .sel').dataset.id;
+
+    try {
+      // 1. Знайти клієнта за телефоном, або створити нового
+      let clientId;
+      const { data: existingClient } = await supabase
+        .from('clients').select('id')
+        .eq('phone', phone).eq('location_id', currentStaff.location_id)
+        .maybeSingle();
+
+      if (existingClient) {
+        clientId = existingClient.id;
+      } else {
+        const { data: newClient, error: clientErr } = await supabase
+          .from('clients').insert({ phone, location_id: currentStaff.location_id }).select().single();
+        if (clientErr) throw clientErr;
+        clientId = newClient.id;
+      }
+
+      // 2. Створити авто
+      const { data: car, error: carErr } = await supabase
+        .from('cars').insert({
+          client_id: clientId, plate, brand_model: brandModel, color,
+          vehicle_type_id: vehicleTypeId
+        }).select().single();
+      if (carErr) throw carErr;
+
+      // 3. Створити запис
+      const { data: booking, error: bookingErr } = await supabase
+        .from('bookings').insert({
+          location_id: currentStaff.location_id,
+          client_id: clientId,
+          car_id: car.id,
+          staff_id: currentStaff.id,
+          wash_type_id: washTypeId,
+          scheduled_at: new Date().toISOString(),
+          status: 'in_progress',
+          source: 'manual',
+          total_price: total,
+          notes
+        }).select().single();
+      if (bookingErr) throw bookingErr;
+
+      // 4. Додаткові послуги
+      const checkedExtras = [...document.querySelectorAll('#extras-box input:checked')];
+      for (const cb of checkedExtras) {
+        await supabase.from('booking_extras').insert({
+          booking_id: booking.id,
+          extra_service_id: cb.dataset.id,
+          price: cb.dataset.price
+        });
+      }
+
+      // 5. Фото (перед — обов'язково, решта — якщо додані)
+      const angles = [
+        { key: 'front', input: document.getElementById('photo-front') },
+        { key: 'back', input: document.getElementById('photo-back') },
+        { key: 'left', input: document.getElementById('photo-left') },
+        { key: 'right', input: document.getElementById('photo-right') }
+      ];
+      for (const angle of angles) {
+        const file = angle.input.files[0];
+        if (!file) continue;
+        const path = `${booking.id}/${angle.key}-${Date.now()}.jpg`;
+        const { error: uploadErr } = await supabase.storage.from('wash-photos').upload(path, file);
+        if (uploadErr) { console.error(uploadErr); continue; }
+        await supabase.from('wash_photos').insert({ booking_id: booking.id, angle: angle.key, storage_path: path });
+      }
+
+      alert('Авто зареєстровано, мийку розпочато');
+      window.location.href = 'index.html';
+
+    } catch (err) {
+      console.error(err);
+      alert('Помилка збереження. Перевірте дані та спробуйте ще раз.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Зареєструвати та почати мийку';
+    }
+  });
+</script>
+</body>
+</html>
