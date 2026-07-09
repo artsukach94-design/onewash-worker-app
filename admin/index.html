@@ -100,7 +100,7 @@
 
     const { data: bookings, error } = await supabase
       .from('bookings')
-      .select('*, cars(*), clients(*), wash_types(*), staff(full_name)')
+      .select('*, cars(*), clients(*), wash_types(*), staff(full_name), wash_boxes(name)')
       .eq('location_id', locationId)
       .gte('scheduled_at', startOfDay.toISOString())
       .lte('scheduled_at', endOfDay.toISOString())
@@ -129,7 +129,6 @@
 
     const statusLabels = { pending: 'Не підтверджено', confirmed: 'Заброньовано', in_progress: 'В процесі', done: 'Виконано', no_show: 'Не з\'явився', cancelled: 'Скасовано' };
     const pillClasses = { pending: 'pending', confirmed: 'confirmed', in_progress: 'progress', done: 'done', no_show: 'no_show', cancelled: 'no_show' };
-    const payLabels = { paid: '<span class="pay-badge paid">Передоплата ✓</span>', unpaid: '<span class="pay-badge unpaid">Не оплачено</span>' };
 
     list.innerHTML = '';
     bookings.forEach(b => {
@@ -139,18 +138,29 @@
       const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
       const staffLabel = b.staff?.full_name || 'Не призначено';
       const washLabel = b.wash_types?.name || '';
+      const boxLabel = b.wash_boxes?.name ? ' · ' + b.wash_boxes.name : '';
       const sourceLabel = { site: 'сайт', manual: 'вручну', call: 'дзвінок', admin: 'адмін' }[b.source] || b.source;
+      const payClass = b.prepayment_status === 'paid' ? 'paid' : 'unpaid';
+      const payText = b.prepayment_status === 'paid' ? 'Передоплата ✓' : 'Не оплачено';
 
       row.innerHTML = `
         <div class="sched-time">${formatTime(b.scheduled_at)}</div>
         <div class="sched-info">
           <b>${carLabel}</b>
-          <span>${clientLabel} · ${washLabel} · ${staffLabel} · ${sourceLabel}</span>
+          <span>${clientLabel} · ${washLabel} · ${staffLabel}${boxLabel} · ${sourceLabel}</span>
         </div>
-        ${payLabels[b.prepayment_status] || ''}
+        <span class="pay-badge ${payClass}" data-id="${b.id}" data-status="${b.prepayment_status}" style="cursor:pointer;">${payText}</span>
         <span class="pill ${pillClasses[b.status] || ''}">${statusLabels[b.status] || b.status}</span>
       `;
       list.appendChild(row);
+    });
+
+    list.querySelectorAll('.pay-badge').forEach(badge => {
+      badge.addEventListener('click', async () => {
+        const newStatus = badge.dataset.status === 'paid' ? 'unpaid' : 'paid';
+        await supabase.from('bookings').update({ prepayment_status: newStatus }).eq('id', badge.dataset.id);
+        await loadDashboard(locationId);
+      });
     });
   }
 </script>
