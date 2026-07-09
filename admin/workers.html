@@ -99,10 +99,17 @@
 <div id="invite-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
   <div style="background:var(--card);border-radius:12px;padding:20px;width:340px;">
     <h3 style="margin:0 0 4px;font-size:15px;">Новий мийник</h3>
-    <p style="margin:0 0 14px;font-size:12.5px;color:var(--text-2);">Спочатку створіть користувача в Supabase → Authentication, потім вставте його email і User UID сюди</p>
+    <p style="margin:0 0 14px;font-size:12.5px;color:var(--text-2);">Система сама створить логін. Пароль потім передайте мийнику особисто (SMS, повідомлення тощо).</p>
     <div class="form-group"><label>Повне ім'я</label><input type="text" id="invite-name" placeholder="Іван Іваненко"></div>
     <div class="form-group"><label>Телефон</label><input type="tel" id="invite-phone" placeholder="+380971234567"></div>
-    <div class="form-group"><label>User UID (з Supabase Auth)</label><input type="text" id="invite-uid" placeholder="a1b2c3d4-..."></div>
+    <div class="form-group"><label>Email для входу</label><input type="email" id="invite-email" placeholder="ivan@onewash.com.ua"></div>
+    <div class="form-group">
+      <label>Пароль</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="invite-password" style="flex:1;">
+        <button class="btn btn-sm" type="button" id="invite-regen-pw" title="Згенерувати новий">↻</button>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;margin-top:10px;">
       <button class="btn" style="flex:1;" id="invite-cancel">Скасувати</button>
       <button class="btn btn-primary" style="flex:1;" id="invite-save">Додати</button>
@@ -111,7 +118,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+  import { supabase, initAdminPage, wireLoginForm, logout, createAuthUser, generatePassword } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -285,35 +292,62 @@
 
   // ==== ЗАПРОШЕННЯ МИЙНИКА ====
   const inviteModal = document.getElementById('invite-modal');
-  document.getElementById('invite-btn').addEventListener('click', () => inviteModal.style.display = 'flex');
+  document.getElementById('invite-btn').addEventListener('click', () => {
+    document.getElementById('invite-password').value = generatePassword();
+    inviteModal.style.display = 'flex';
+  });
   document.getElementById('invite-cancel').addEventListener('click', () => inviteModal.style.display = 'none');
+  document.getElementById('invite-regen-pw').addEventListener('click', () => {
+    document.getElementById('invite-password').value = generatePassword();
+  });
 
   document.getElementById('invite-save').addEventListener('click', async () => {
     const fullName = document.getElementById('invite-name').value.trim();
     const phone = document.getElementById('invite-phone').value.trim();
-    const uid = document.getElementById('invite-uid').value.trim();
+    const email = document.getElementById('invite-email').value.trim();
+    const password = document.getElementById('invite-password').value;
 
-    if (!fullName || !uid) {
-      alert('Заповніть принаймні ім\'я і User UID');
+    if (!fullName || !email || !password) {
+      alert('Заповніть ім\'я, email і пароль');
+      return;
+    }
+    if (password.length < 6) {
+      alert('Пароль має бути мінімум 6 символів');
       return;
     }
 
-    const { error } = await supabase.from('staff').insert({
-      auth_user_id: uid,
-      full_name: fullName,
-      phone,
-      location_id: currentLocationId,
-      role: 'washer',
-      is_active: true
-    });
+    const saveBtn = document.getElementById('invite-save');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Створюємо...';
 
-    if (error) { console.error(error); alert('Помилка додавання мийника'); return; }
+    try {
+      const uid = await createAuthUser(email, password);
 
-    inviteModal.style.display = 'none';
-    document.getElementById('invite-name').value = '';
-    document.getElementById('invite-phone').value = '';
-    document.getElementById('invite-uid').value = '';
-    await loadWorkers();
+      const { error } = await supabase.from('staff').insert({
+        auth_user_id: uid,
+        full_name: fullName,
+        phone,
+        location_id: currentLocationId,
+        role: 'washer',
+        is_active: true
+      });
+      if (error) throw error;
+
+      inviteModal.style.display = 'none';
+      alert(`Мийника додано.\n\nПередайте йому дані для входу:\nEmail: ${email}\nПароль: ${password}`);
+
+      document.getElementById('invite-name').value = '';
+      document.getElementById('invite-phone').value = '';
+      document.getElementById('invite-email').value = '';
+      await loadWorkers();
+
+    } catch (err) {
+      console.error(err);
+      alert('Помилка додавання мийника: ' + (err.message || 'спробуйте ще раз'));
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Додати';
+    }
   });
 </script>
 </body>
