@@ -61,12 +61,25 @@
           <div class="panel-head"><h3>Список клієнтів</h3></div>
           <div class="panel-body" style="padding:0;">
             <table id="clients-table">
-              <tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th></tr>
-              <tr><td colspan="5" class="empty-state">Завантаження...</td></tr>
+              <tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th></th></tr>
+              <tr><td colspan="7" class="empty-state">Завантаження...</td></tr>
             </table>
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА СПИСАННЯ КЕШБЕКУ -->
+<div id="cashback-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:320px;">
+    <h3 style="margin:0 0 4px;font-size:15px;" id="cb-client-name">Списати кешбек</h3>
+    <p style="margin:0 0 14px;font-size:12.5px;color:var(--text-2);">Доступно: <b id="cb-balance">0</b> грн</p>
+    <div class="form-group"><label>Сума списання, грн</label><input type="text" id="cb-amount"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn" style="flex:1;" id="cb-cancel">Скасувати</button>
+      <button class="btn btn-primary" style="flex:1;" id="cb-save">Списати</button>
     </div>
   </div>
 </div>
@@ -112,11 +125,11 @@
 
     const table = document.getElementById('clients-table');
     if (clients.length === 0) {
-      table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th></tr><tr><td colspan="5" class="empty-state">Клієнтів ще немає</td></tr>';
+      table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th></th></tr><tr><td colspan="7" class="empty-state">Клієнтів ще немає</td></tr>';
       return;
     }
 
-    table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th></tr>';
+    table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th></th></tr>';
     clients.forEach(c => {
       const stats = statsByClient[c.id] || { done: 0, last: null };
       const carsLabel = c.cars.length
@@ -134,6 +147,8 @@
         <td>${carsLabel}</td>
         <td>${lastVisit}</td>
         <td>${stats.done}</td>
+        <td><b>${Number(c.cashback_balance || 0).toLocaleString('uk-UA')}</b></td>
+        <td><button class="btn btn-sm cashback-btn" data-id="${c.id}" data-name="${c.full_name || c.phone}" data-balance="${c.cashback_balance || 0}">Списати</button></td>
       `;
       table.appendChild(row);
     });
@@ -143,7 +158,45 @@
         await supabase.from('clients').update({ full_name: input.value.trim() }).eq('id', input.dataset.id);
       });
     });
+
+    table.querySelectorAll('.cashback-btn').forEach(btn => {
+      btn.addEventListener('click', () => openCashbackModal(btn.dataset.id, btn.dataset.name, btn.dataset.balance));
+    });
   }
+
+  // ==== СПИСАННЯ КЕШБЕКУ ====
+  const cashbackModal = document.getElementById('cashback-modal');
+  let editingClientId = null;
+  let editingClientBalance = 0;
+
+  function openCashbackModal(clientId, clientName, balance) {
+    editingClientId = clientId;
+    editingClientBalance = Number(balance);
+    document.getElementById('cb-client-name').textContent = 'Списати кешбек — ' + clientName;
+    document.getElementById('cb-balance').textContent = editingClientBalance.toLocaleString('uk-UA');
+    document.getElementById('cb-amount').value = '';
+    cashbackModal.style.display = 'flex';
+  }
+
+  document.getElementById('cb-cancel').addEventListener('click', () => cashbackModal.style.display = 'none');
+
+  document.getElementById('cb-save').addEventListener('click', async () => {
+    const amount = parseFloat(document.getElementById('cb-amount').value);
+    if (isNaN(amount) || amount <= 0) { alert('Вкажіть коректну суму'); return; }
+    if (amount > editingClientBalance) { alert('Сума перевищує доступний кешбек клієнта'); return; }
+
+    const { error: txErr } = await supabase.from('cashback_transactions').insert({
+      client_id: editingClientId, type: 'redemption', amount: -amount
+    });
+    if (txErr) { console.error(txErr); alert('Помилка списання'); return; }
+
+    const { error: updErr } = await supabase.from('clients')
+      .update({ cashback_balance: editingClientBalance - amount }).eq('id', editingClientId);
+    if (updErr) { console.error(updErr); alert('Помилка оновлення балансу'); return; }
+
+    cashbackModal.style.display = 'none';
+    await loadClients();
+  });
 </script>
 </body>
 </html>
