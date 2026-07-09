@@ -1,1 +1,7 @@
 <script type="module" src="app.js"></script>
+const { data: { session } } = await supabase.auth.getSession()
+if (!session) {
+  // показати форму логіну
+} else {
+  loadToday()
+}
