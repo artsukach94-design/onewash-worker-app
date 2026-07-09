@@ -126,6 +126,14 @@
     <div class="section-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin:16px 0 8px;">Додаткові послуги</div>
     <div id="m-extras-box" style="border:1px solid var(--border);border-radius:10px;padding:2px 12px;"></div>
 
+    <div class="form-group" style="margin-top:14px;">
+      <label>Вартість, грн <span style="font-weight:400;color:var(--text-3);">(розраховується автоматично, можна змінити вручну — наприклад, для складного забруднення)</span></label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="m-total-price" style="flex:1;">
+        <button class="btn btn-sm" id="m-recalc" type="button" title="Перерахувати автоматично">↻</button>
+      </div>
+    </div>
+
     <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;">
       <input type="checkbox" id="m-prepaid" style="width:17px;height:17px;"> Передоплату вже отримано
     </label>
@@ -145,7 +153,7 @@
 
   let currentLocationId = null;
   let selectedDate = new Date(); selectedDate.setHours(0, 0, 0, 0);
-  let staffList = [], vehicleTypes = [], washTypes = [], boxList = [], extraServices = [];
+  let staffList = [], vehicleTypes = [], washTypes = [], boxList = [], extraServices = [], washPrices = [];
 
   // Популярні марки та моделі авто — з опцією "Інша", якщо потрібної немає в списку
   const CAR_BRANDS = {
@@ -240,18 +248,20 @@
   });
 
   async function loadOptions() {
-    const [{ data: staff }, { data: vt }, { data: wt }, { data: boxes }, { data: extras }] = await Promise.all([
+    const [{ data: staff }, { data: vt }, { data: wt }, { data: boxes }, { data: extras }, { data: prices }] = await Promise.all([
       supabase.from('staff').select('*').eq('location_id', currentLocationId).eq('is_active', true).order('full_name'),
       supabase.from('vehicle_types').select('*').eq('location_id', currentLocationId).order('sort_order'),
       supabase.from('wash_types').select('*').eq('location_id', currentLocationId).order('sort_order'),
       supabase.from('wash_boxes').select('*').eq('location_id', currentLocationId).order('sort_order'),
-      supabase.from('extra_services').select('*').eq('location_id', currentLocationId).eq('is_active', true)
+      supabase.from('extra_services').select('*').eq('location_id', currentLocationId).eq('is_active', true),
+      supabase.from('wash_prices').select('*')
     ]);
     staffList = staff || [];
     vehicleTypes = vt || [];
     washTypes = wt || [];
     boxList = boxes || [];
     extraServices = extras || [];
+    washPrices = prices || [];
 
     document.getElementById('m-staff').innerHTML = staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
     document.getElementById('m-vtype').innerHTML = vehicleTypes.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
@@ -285,6 +295,38 @@
       document.getElementById('m-duration-custom').style.display = val === 'custom' ? 'grid' : 'none';
       document.getElementById('m-duration-fullday').style.display = val === 'custom' ? 'none' : 'block';
     });
+
+    // ==== АВТОРОЗРАХУНОК ЦІНИ (з можливістю ручної правки) ====
+    const priceInput = document.getElementById('m-total-price');
+    priceInput.dataset.dirty = 'false';
+    priceInput.addEventListener('input', () => { priceInput.dataset.dirty = 'true'; });
+
+    document.getElementById('m-recalc').addEventListener('click', () => {
+      priceInput.dataset.dirty = 'false';
+      recomputeTotal();
+    });
+
+    document.getElementById('m-washtype').addEventListener('change', recomputeTotal);
+    document.getElementById('m-vtype').addEventListener('change', recomputeTotal);
+    extrasBox.addEventListener('change', recomputeTotal);
+
+    recomputeTotal();
+  }
+
+  function recomputeTotal() {
+    const priceInput = document.getElementById('m-total-price');
+    if (priceInput.dataset.dirty === 'true') return; // адмін уже ввів свою ціну — не перезаписуємо
+
+    const washTypeId = document.getElementById('m-washtype').value;
+    const vtypeId = document.getElementById('m-vtype').value;
+    const priceRow = washPrices.find(p => p.wash_type_id === washTypeId && p.vehicle_type_id === vtypeId);
+    let total = priceRow ? Number(priceRow.price) : 0;
+
+    document.querySelectorAll('#m-extras-box input:checked').forEach(cb => {
+      total += Number(cb.dataset.price);
+    });
+
+    priceInput.value = total;
   }
 
   function updateDurationMode() {
@@ -437,12 +479,9 @@
         carId = car.id;
       }
 
-      // орієнтовна ціна: базова ціна типу авто/послуги + вибрані додаткові послуги
-      const { data: priceRow } = await supabase
-        .from('wash_prices').select('price').eq('wash_type_id', washTypeId).eq('vehicle_type_id', vtypeId).maybeSingle();
-      let total = priceRow ? Number(priceRow.price) : 0;
+      // ціна — те значення, що зараз у полі "Вартість" (авто-розраховане або вручну змінене адміном)
+      const total = parseFloat(document.getElementById('m-total-price').value) || 0;
       const checkedExtras = [...document.querySelectorAll('#m-extras-box input:checked')];
-      checkedExtras.forEach(cb => { total += Number(cb.dataset.price); });
 
       const { data: booking, error: bErr } = await supabase.from('bookings').insert({
         location_id: currentLocationId,
@@ -473,6 +512,7 @@
       document.getElementById('m-brand-other-wrap').style.display = 'none';
       document.getElementById('m-model-other-wrap').style.display = 'none';
       document.getElementById('m-prepaid').checked = false;
+      document.getElementById('m-total-price').dataset.dirty = 'false';
       await loadDay();
 
     } catch (err) {
