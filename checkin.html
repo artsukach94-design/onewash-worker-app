@@ -44,8 +44,15 @@
           <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="phone" placeholder="+380671112233" required></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label>Марка і модель</label><input type="text" id="brand-model" placeholder="Toyota Camry"></div>
+          <div class="form-group"><label>Марка</label><select id="brand-select"></select></div>
           <div class="form-group"><label>Колір</label><input type="text" id="color" placeholder="Білий"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" id="brand-other-wrap" style="display:none;"><label>Введіть марку</label><input type="text" id="brand-other"></div>
+          <div class="form-group"><label>Модель</label><select id="model-select"></select></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" id="model-other-wrap" style="display:none;"><label>Введіть модель</label><input type="text" id="model-other"></div>
         </div>
 
         <div class="form-group">
@@ -112,6 +119,102 @@
   let currentStaff = null;
   let vehicleTypes = [], washTypes = [], washPrices = [], extraServices = [];
 
+  // Популярні марки та моделі авто — з опцією "Інша", якщо потрібної немає в списку
+  const CAR_BRANDS = {
+    'Toyota': ['Camry', 'Corolla', 'RAV4', 'Land Cruiser', 'Yaris'],
+    'Volkswagen': ['Golf', 'Passat', 'Tiguan', 'Polo', 'Jetta'],
+    'BMW': ['3 Series', '5 Series', 'X5', 'X3', '7 Series'],
+    'Mercedes-Benz': ['C-Class', 'E-Class', 'GLE', 'S-Class', 'A-Class'],
+    'Audi': ['A4', 'A6', 'Q5', 'Q7', 'A3'],
+    'Skoda': ['Octavia', 'Superb', 'Kodiaq', 'Fabia', 'Karoq'],
+    'Renault': ['Duster', 'Megane', 'Logan', 'Kadjar', 'Clio'],
+    'Hyundai': ['Tucson', 'Elantra', 'Santa Fe', 'i30', 'Sonata'],
+    'Kia': ['Sportage', 'Rio', 'Sorento', 'Ceed', 'Optima'],
+    'Nissan': ['Qashqai', 'X-Trail', 'Juke', 'Leaf', 'Almera'],
+    'Ford': ['Focus', 'Fusion', 'Kuga', 'Explorer', 'Fiesta'],
+    'Opel': ['Astra', 'Insignia', 'Corsa', 'Mokka', 'Vectra'],
+    'Peugeot': ['308', '3008', '508', '2008', '208'],
+    'Chevrolet': ['Aveo', 'Cruze', 'Lacetti', 'Captiva', 'Niva'],
+    'Honda': ['Civic', 'CR-V', 'Accord', 'HR-V', 'Pilot'],
+    'Mazda': ['3', '6', 'CX-5', 'CX-3', 'CX-9'],
+    'Mitsubishi': ['Outlander', 'ASX', 'Lancer', 'Pajero', 'Eclipse Cross'],
+    'Volvo': ['XC60', 'XC90', 'S60', 'V40', 'XC40'],
+    'Lexus': ['RX', 'NX', 'ES', 'GX', 'LX'],
+    'Land Rover': ['Range Rover', 'Discovery', 'Defender', 'Evoque'],
+    'Jeep': ['Grand Cherokee', 'Compass', 'Wrangler', 'Renegade'],
+    'Subaru': ['Forester', 'Outback', 'Impreza', 'XV'],
+    'Fiat': ['Tipo', '500', 'Panda', 'Doblo'],
+    'Citroen': ['C4', 'C3', 'Berlingo', 'C5 Aircross'],
+    'Mini': ['Cooper', 'Countryman', 'Clubman'],
+    'Porsche': ['Cayenne', 'Macan', 'Panamera', '911'],
+    'Jaguar': ['XF', 'XE', 'F-Pace', 'E-Pace'],
+    'Suzuki': ['Vitara', 'SX4', 'Swift', 'Jimny'],
+    'Dacia': ['Duster', 'Logan', 'Sandero'],
+    'Chery': ['Tiggo 7', 'Tiggo 4', 'Tiggo 8'],
+    'Geely': ['Coolray', 'Atlas', 'Emgrand']
+  };
+
+  function fillModelsFor(brand) {
+    const modelSelect = document.getElementById('model-select');
+    const models = CAR_BRANDS[brand] || [];
+    modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('')
+      + '<option value="__other__">Інша модель…</option>';
+    document.getElementById('model-other-wrap').style.display = 'none';
+  }
+
+  function initBrandModelSelects() {
+    const brandSelect = document.getElementById('brand-select');
+    brandSelect.innerHTML = Object.keys(CAR_BRANDS).sort().map(b => `<option value="${b}">${b}</option>`).join('')
+      + '<option value="__other__">Інша марка…</option>';
+    fillModelsFor(brandSelect.value);
+
+    brandSelect.addEventListener('change', () => {
+      document.getElementById('brand-other-wrap').style.display = brandSelect.value === '__other__' ? 'block' : 'none';
+      if (brandSelect.value !== '__other__') fillModelsFor(brandSelect.value);
+      else {
+        document.getElementById('model-select').innerHTML = '<option value="__other__">Інша модель…</option>';
+        document.getElementById('model-other-wrap').style.display = 'block';
+      }
+    });
+    document.getElementById('model-select').addEventListener('change', () => {
+      document.getElementById('model-other-wrap').style.display = document.getElementById('model-select').value === '__other__' ? 'block' : 'none';
+    });
+  }
+
+  function getBrandModelValue() {
+    const brandSelect = document.getElementById('brand-select');
+    const modelSelect = document.getElementById('model-select');
+    const brand = brandSelect.value === '__other__' ? document.getElementById('brand-other').value.trim() : brandSelect.value;
+    const model = modelSelect.value === '__other__' ? document.getElementById('model-other').value.trim() : modelSelect.value;
+    return [brand, model].filter(Boolean).join(' ');
+  }
+
+  // Найкраще співставлення для випадку, коли авто вже прив'язане до існуючого запису
+  function setBrandModelFromString(fullText) {
+    if (!fullText) return;
+    const brands = Object.keys(CAR_BRANDS).sort((a, b) => b.length - a.length);
+    const match = brands.find(b => fullText === b || fullText.startsWith(b + ' '));
+    if (match) {
+      document.getElementById('brand-select').value = match;
+      document.getElementById('brand-other-wrap').style.display = 'none';
+      fillModelsFor(match);
+      const model = fullText.slice(match.length).trim();
+      const modelSelect = document.getElementById('model-select');
+      const hasModel = [...modelSelect.options].some(o => o.value === model);
+      if (model && hasModel) {
+        modelSelect.value = model;
+      } else if (model) {
+        modelSelect.value = '__other__';
+        document.getElementById('model-other-wrap').style.display = 'block';
+        document.getElementById('model-other').value = model;
+      }
+    } else {
+      document.getElementById('brand-select').value = '__other__';
+      document.getElementById('brand-other-wrap').style.display = 'block';
+      document.getElementById('brand-other').value = fullText;
+    }
+  }
+
   // Якщо в посиланні є ?booking=ID — значить, мийник прийшов сюди з екрана
   // "Сьогодні" по кнопці "Авто приїхало" для вже існуючого запису.
   // Якщо параметра немає — це нова реєстрація авто "з вулиці" (без попереднього запису).
@@ -142,6 +245,7 @@
     renderChips('vtype-box', vehicleTypes, 'vtype-chip');
     renderChips('washtype-box', washTypes, 'service-chip');
     renderExtras();
+    initBrandModelSelects();
     updateTotal();
   }
 
@@ -169,7 +273,7 @@
     }
     if (booking.cars) {
       document.getElementById('plate').value = booking.cars.plate || '';
-      document.getElementById('brand-model').value = booking.cars.brand_model || '';
+      setBrandModelFromString(booking.cars.brand_model || '');
       document.getElementById('color').value = booking.cars.color || '';
     }
     document.getElementById('notes').value = booking.notes || '';
@@ -271,7 +375,7 @@
 
     const plate = document.getElementById('plate').value.trim();
     const phone = document.getElementById('phone').value.trim();
-    const brandModel = document.getElementById('brand-model').value.trim();
+    const brandModel = getBrandModelValue();
     const color = document.getElementById('color').value.trim();
     const notes = document.getElementById('notes').value.trim();
     const total = updateTotal();
