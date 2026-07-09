@@ -35,8 +35,8 @@
     </div>
 
     <div class="content">
-      <div class="page-h">Авто приїхало</div>
-      <div class="page-sub">Заповніть дані перед миттям</div>
+      <div class="page-h" id="page-h">Авто приїхало</div>
+      <div class="page-sub" id="page-sub">Заповніть дані перед миттям</div>
 
       <form id="checkin-form">
         <div class="form-row">
@@ -112,9 +112,18 @@
   let currentStaff = null;
   let vehicleTypes = [], washTypes = [], washPrices = [], extraServices = [];
 
+  // Якщо в посиланні є ?booking=ID — значить, мийник прийшов сюди з екрана
+  // "Сьогодні" по кнопці "Авто приїхало" для вже існуючого запису.
+  // Якщо параметра немає — це нова реєстрація авто "з вулиці" (без попереднього запису).
+  const existingBookingId = new URLSearchParams(window.location.search).get('booking');
+  let existingBooking = null;
+
   initPage(async (staff) => {
     currentStaff = staff;
     await loadOptions();
+    if (existingBookingId) {
+      await loadExistingBooking();
+    }
   });
 
   async function loadOptions() {
@@ -134,6 +143,57 @@
     renderChips('washtype-box', washTypes, 'service-chip');
     renderExtras();
     updateTotal();
+  }
+
+  // Підтягує дані вже існуючого запису (клієнт, авто, тип послуги) і заповнює форму
+  async function loadExistingBooking() {
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .select('*, cars(*), clients(*), booking_extras(*)')
+      .eq('id', existingBookingId)
+      .single();
+
+    if (error || !booking) {
+      console.error(error);
+      alert('Не вдалося завантажити запис');
+      return;
+    }
+    existingBooking = booking;
+
+    document.getElementById('page-h').textContent = 'Авто приїхало за записом';
+    document.getElementById('page-sub').textContent = `Запис на ${new Date(booking.scheduled_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })} — перевірте і доповніть дані`;
+    document.getElementById('submit-btn').textContent = 'Підтвердити приїзд і почати мийку';
+
+    if (booking.clients) {
+      document.getElementById('phone').value = booking.clients.phone || '';
+    }
+    if (booking.cars) {
+      document.getElementById('plate').value = booking.cars.plate || '';
+      document.getElementById('brand-model').value = booking.cars.brand_model || '';
+      document.getElementById('color').value = booking.cars.color || '';
+    }
+    document.getElementById('notes').value = booking.notes || '';
+
+    if (booking.cars?.vehicle_type_id) {
+      selectChipById('vtype-box', booking.cars.vehicle_type_id);
+    }
+    if (booking.wash_type_id) {
+      selectChipById('washtype-box', booking.wash_type_id);
+    }
+    if (booking.booking_extras?.length) {
+      booking.booking_extras.forEach(be => {
+        const cb = document.querySelector(`#extras-box input[data-id="${be.extra_service_id}"]`);
+        if (cb) cb.checked = true;
+      });
+    }
+    updateTotal();
+  }
+
+  function selectChipById(containerId, id) {
+    const box = document.getElementById(containerId);
+    box.querySelectorAll('[data-id]').forEach(c => c.classList.remove('sel'));
+    const target = box.querySelector(`[data-id="${id}"]`);
+    if (target) target.classList.add('sel');
   }
 
   function renderChips(containerId, items, className) {
@@ -219,57 +279,92 @@
     const washTypeId = document.querySelector('#washtype-box .sel').dataset.id;
 
     try {
-      // 1. Знайти клієнта за телефоном, або створити нового
-      let clientId;
-      const { data: existingClient } = await supabase
-        .from('clients').select('id')
-        .eq('phone', phone).eq('location_id', currentStaff.location_id)
-        .maybeSingle();
+      let bookingId;
 
-      if (existingClient) {
-        clientId = existingClient.id;
-      } else {
-        const { data: newClient, error: clientErr } = await supabase
-          .from('clients').insert({ phone, location_id: currentStaff.location_id }).select().single();
-        if (clientErr) throw clientErr;
-        clientId = newClient.id;
-      }
+      if (existingBooking) {
+        // РЕЖИМ 1: авто приїхало за вже існуючим записом — оновлюємо той самий запис,
+        // а не створюємо новий (щоб не було дублів)
+        bookingId = existingBooking.id;
 
-      // 2. Створити авто
-      const { data: car, error: carErr } = await supabase
-        .from('cars').insert({
-          client_id: clientId, plate, brand_model: brandModel, color,
-          vehicle_type_id: vehicleTypeId
-        }).select().single();
-      if (carErr) throw carErr;
+        if (existingBooking.client_id) {
+          await supabase.from('clients').update({ phone }).eq('id', existingBooking.client_id);
+        }
+        if (existingBooking.car_id) {
+          await supabase.from('cars').update({
+            plate, brand_model: brandModel, color, vehicle_type_id: vehicleTypeId
+          }).eq('id', existingBooking.car_id);
+        }
 
-      // 3. Створити запис
-      const { data: booking, error: bookingErr } = await supabase
-        .from('bookings').insert({
-          location_id: currentStaff.location_id,
-          client_id: clientId,
-          car_id: car.id,
-          staff_id: currentStaff.id,
+        const { error: updateErr } = await supabase.from('bookings').update({
           wash_type_id: washTypeId,
-          scheduled_at: new Date().toISOString(),
           status: 'in_progress',
-          source: 'manual',
           total_price: total,
           notes
-        }).select().single();
-      if (bookingErr) throw bookingErr;
+        }).eq('id', bookingId);
+        if (updateErr) throw updateErr;
 
-      // 4. Додаткові послуги
-      const checkedExtras = [...document.querySelectorAll('#extras-box input:checked')];
-      for (const cb of checkedExtras) {
-        await supabase.from('booking_extras').insert({
-          booking_id: booking.id,
-          extra_service_id: cb.dataset.id,
-          price: cb.dataset.price
-        });
+        // перезаписуємо додаткові послуги (видаляємо старі, вставляємо поточний вибір)
+        await supabase.from('booking_extras').delete().eq('booking_id', bookingId);
+        const checkedExtras = [...document.querySelectorAll('#extras-box input:checked')];
+        for (const cb of checkedExtras) {
+          await supabase.from('booking_extras').insert({
+            booking_id: bookingId,
+            extra_service_id: cb.dataset.id,
+            price: cb.dataset.price
+          });
+        }
+
+      } else {
+        // РЕЖИМ 2: нова реєстрація авто "з вулиці", без попереднього запису
+        let clientId;
+        const { data: existingClient } = await supabase
+          .from('clients').select('id')
+          .eq('phone', phone).eq('location_id', currentStaff.location_id)
+          .maybeSingle();
+
+        if (existingClient) {
+          clientId = existingClient.id;
+        } else {
+          const { data: newClient, error: clientErr } = await supabase
+            .from('clients').insert({ phone, location_id: currentStaff.location_id }).select().single();
+          if (clientErr) throw clientErr;
+          clientId = newClient.id;
+        }
+
+        const { data: car, error: carErr } = await supabase
+          .from('cars').insert({
+            client_id: clientId, plate, brand_model: brandModel, color,
+            vehicle_type_id: vehicleTypeId
+          }).select().single();
+        if (carErr) throw carErr;
+
+        const { data: booking, error: bookingErr } = await supabase
+          .from('bookings').insert({
+            location_id: currentStaff.location_id,
+            client_id: clientId,
+            car_id: car.id,
+            staff_id: currentStaff.id,
+            wash_type_id: washTypeId,
+            scheduled_at: new Date().toISOString(),
+            status: 'in_progress',
+            source: 'manual',
+            total_price: total,
+            notes
+          }).select().single();
+        if (bookingErr) throw bookingErr;
+        bookingId = booking.id;
+
+        const checkedExtras = [...document.querySelectorAll('#extras-box input:checked')];
+        for (const cb of checkedExtras) {
+          await supabase.from('booking_extras').insert({
+            booking_id: bookingId,
+            extra_service_id: cb.dataset.id,
+            price: cb.dataset.price
+          });
+        }
       }
 
-      // 5. Фото (перед — обов'язково, решта — якщо додані)
+      // Фото (перед — обов'язково, решта — якщо додані) — спільне для обох режимів
       const angles = [
         { key: 'front', input: document.getElementById('photo-front') },
         { key: 'back', input: document.getElementById('photo-back') },
@@ -279,20 +374,20 @@
       for (const angle of angles) {
         const file = angle.input.files[0];
         if (!file) continue;
-        const path = `${booking.id}/${angle.key}-${Date.now()}.jpg`;
+        const path = `${bookingId}/${angle.key}-${Date.now()}.jpg`;
         const { error: uploadErr } = await supabase.storage.from('wash-photos').upload(path, file);
         if (uploadErr) { console.error(uploadErr); continue; }
-        await supabase.from('wash_photos').insert({ booking_id: booking.id, angle: angle.key, storage_path: path });
+        await supabase.from('wash_photos').insert({ booking_id: bookingId, angle: angle.key, storage_path: path });
       }
 
-      alert('Авто зареєстровано, мийку розпочато');
+      alert('Мийку розпочато');
       window.location.href = 'index.html';
 
     } catch (err) {
       console.error(err);
       alert('Помилка збереження. Перевірте дані та спробуйте ще раз.');
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Зареєструвати та почати мийку';
+      submitBtn.textContent = existingBooking ? 'Підтвердити приїзд і почати мийку' : 'Зареєструвати та почати мийку';
     }
   });
 </script>
