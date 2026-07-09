@@ -8,6 +8,23 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Створює новий логін (email+пароль) у Supabase Auth і повертає його User UID.
+// Використовує ОКРЕМИЙ тимчасовий клієнт (persistSession:false), щоб не втратити
+// сесію адміністратора, який зараз залогінений у цьому вікні браузера.
+export async function createAuthUser(email, password) {
+  const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+  const { data, error } = await tempClient.auth.signUp({ email, password });
+  if (error) throw error;
+  if (!data.user) throw new Error('Не вдалося створити користувача');
+  return data.user.id;
+}
+
+export function generatePassword() {
+  return Math.random().toString(36).slice(-6) + Math.floor(10 + Math.random() * 90);
+}
+
 export async function getSession() {
   const { data: { session } } = await supabase.auth.getSession();
   return session;
