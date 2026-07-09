@@ -55,7 +55,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initPage, wireLoginForm, logout, formatTime, formatDayShort } from './app.js';
+  import { supabase, initPage, wireLoginForm, logout, formatTime, formatDayShort, subscribeToTable } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -68,6 +68,12 @@
     currentStaff = staff;
     renderDayStrip();
     await loadDay(selectedDate);
+
+    // Realtime: якщо запис цього мийника зміниться (адмін підтвердить, скасує тощо) —
+    // відкритий день сам оновиться
+    subscribeToTable('bookings-calendar-' + staff.id, 'bookings', `staff_id=eq.${staff.id}`, () => {
+      loadDay(selectedDate);
+    });
   });
 
   function renderDayStrip() {
