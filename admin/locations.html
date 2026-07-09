@@ -73,9 +73,16 @@
     <div id="am-list" style="margin-bottom:16px;"></div>
 
     <div class="section-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin:12px 0 8px;">Додати адміна</div>
-    <p style="font-size:11.5px;color:var(--text-2);margin:0 0 10px;">Спочатку створіть користувача в Supabase → Authentication, потім вкажіть його email/ім'я і User UID тут</p>
+    <p style="font-size:11.5px;color:var(--text-2);margin:0 0 10px;">Система сама створить логін. Пароль передайте адміну особисто.</p>
     <div class="form-group"><label>Повне ім'я</label><input type="text" id="am-name" placeholder="Ім'я адміна мийки"></div>
-    <div class="form-group"><label>User UID (з Supabase Auth)</label><input type="text" id="am-uid" placeholder="a1b2c3d4-..."></div>
+    <div class="form-group"><label>Email для входу</label><input type="email" id="am-email" placeholder="admin@mийка.ua"></div>
+    <div class="form-group">
+      <label>Пароль</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="am-password" style="flex:1;">
+        <button class="btn btn-sm" type="button" id="am-regen-pw" title="Згенерувати новий">↻</button>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;margin-top:10px;">
       <button class="btn" style="flex:1;" id="am-close">Закрити</button>
       <button class="btn btn-primary" style="flex:1;" id="am-add">Додати доступ</button>
@@ -84,7 +91,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+  import { supabase, initAdminPage, wireLoginForm, logout, createAuthUser, generatePassword } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -158,9 +165,14 @@
   async function openAdminsModal(locationId, locationName) {
     editingLocationId = locationId;
     document.getElementById('am-location-name').textContent = 'Адміни — ' + locationName;
+    document.getElementById('am-password').value = generatePassword();
     adminsModal.style.display = 'flex';
     await renderAdminsList();
   }
+
+  document.getElementById('am-regen-pw').addEventListener('click', () => {
+    document.getElementById('am-password').value = generatePassword();
+  });
 
   document.getElementById('am-close').addEventListener('click', () => adminsModal.style.display = 'none');
 
@@ -199,35 +211,39 @@
 
   document.getElementById('am-add').addEventListener('click', async () => {
     const fullName = document.getElementById('am-name').value.trim();
-    const uid = document.getElementById('am-uid').value.trim();
-    if (!uid) { alert('Вкажіть User UID'); return; }
+    const email = document.getElementById('am-email').value.trim();
+    const password = document.getElementById('am-password').value;
+
+    if (!fullName || !email || !password) { alert('Заповніть ім\'я, email і пароль'); return; }
+    if (password.length < 6) { alert('Пароль має бути мінімум 6 символів'); return; }
+
+    const saveBtn = document.getElementById('am-add');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Створюємо...';
 
     try {
-      let { data: existingAdmin } = await supabase
-        .from('platform_admins').select('id').eq('auth_user_id', uid).maybeSingle();
+      const uid = await createAuthUser(email, password);
 
-      let adminId;
-      if (existingAdmin) {
-        adminId = existingAdmin.id;
-      } else {
-        const { data: newAdmin, error: aErr } = await supabase
-          .from('platform_admins').insert({ auth_user_id: uid, full_name: fullName, is_superadmin: false }).select().single();
-        if (aErr) throw aErr;
-        adminId = newAdmin.id;
-      }
+      const { data: newAdmin, error: aErr } = await supabase
+        .from('platform_admins').insert({ auth_user_id: uid, full_name: fullName, is_superadmin: false }).select().single();
+      if (aErr) throw aErr;
 
       const { error: accessErr } = await supabase
-        .from('admin_location_access').insert({ admin_id: adminId, location_id: editingLocationId });
+        .from('admin_location_access').insert({ admin_id: newAdmin.id, location_id: editingLocationId });
       if (accessErr) throw accessErr;
 
       document.getElementById('am-name').value = '';
-      document.getElementById('am-uid').value = '';
+      document.getElementById('am-email').value = '';
+      alert(`Адміна додано.\n\nПередайте йому дані для входу:\nEmail: ${email}\nПароль: ${password}`);
       await renderAdminsList();
       await loadLocations();
 
     } catch (err) {
       console.error(err);
-      alert('Помилка додавання доступу (можливо, цей адмін уже має доступ до цієї мийки)');
+      alert('Помилка додавання адміна: ' + (err.message || 'спробуйте ще раз'));
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Додати доступ';
     }
   });
 </script>
