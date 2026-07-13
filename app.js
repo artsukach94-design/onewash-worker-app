@@ -73,8 +73,12 @@ export async function initPage(onLoggedIn) {
   if (nameEl) nameEl.textContent = staff.full_name;
   const initialsEl = document.getElementById('staff-initials');
   if (initialsEl) {
-    const parts = staff.full_name.split(' ');
-    initialsEl.textContent = (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
+    if (staff.photo_url) {
+      initialsEl.innerHTML = `<img src="${staff.photo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    } else {
+      const parts = staff.full_name.split(' ');
+      initialsEl.textContent = (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
+    }
   }
 
   // Назва і іконка на головному екрані — підтягуємо мийку (і її лого, якщо адмін завантажив)
