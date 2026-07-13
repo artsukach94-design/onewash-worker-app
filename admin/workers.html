@@ -158,16 +158,47 @@
     table.innerHTML = '<tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Графік</th><th>Доступ</th></tr>';
     workers.forEach(w => {
       const initials = w.full_name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+      const avatarHtml = w.photo_url
+        ? `<img src="${w.photo_url}" class="av" style="object-fit:cover;">`
+        : `<div class="av">${initials}</div>`;
 
       const row = document.createElement('tr');
       row.innerHTML = `
-        <td class="person"><div class="av">${initials}</div>${w.full_name}</td>
+        <td class="person">
+          <label style="cursor:pointer;position:relative;" title="Натисніть, щоб змінити фото">
+            ${avatarHtml}
+            <input type="file" accept="image/*" class="photo-input" data-id="${w.id}" style="display:none;">
+          </label>
+          ${w.full_name}
+        </td>
         <td>${w.phone || '—'}</td>
         <td><span class="role-badge">${w.role === 'senior_washer' ? 'Старший мийник' : 'Мийник'}</span></td>
         <td><button class="btn btn-sm schedule-btn" data-id="${w.id}" data-name="${w.full_name}">Відкрити календар</button></td>
         <td><span class="toggle ${w.is_active ? 'on' : ''}" data-id="${w.id}" data-active="${w.is_active}"></span></td>
       `;
       table.appendChild(row);
+    });
+
+    document.querySelectorAll('.photo-input').forEach(input => {
+      input.addEventListener('change', async () => {
+        const file = input.files[0];
+        if (!file) return;
+        const staffId = input.dataset.id;
+        try {
+          const ext = file.name.split('.').pop();
+          const path = `${staffId}/photo.${ext}`;
+          const { error: upErr } = await supabase.storage.from('staff-photos').upload(path, file, { upsert: true });
+          if (upErr) throw upErr;
+          const { data: pub } = supabase.storage.from('staff-photos').getPublicUrl(path);
+          const photoUrl = pub.publicUrl + '?t=' + Date.now();
+          const { error: updErr } = await supabase.from('staff').update({ photo_url: photoUrl }).eq('id', staffId);
+          if (updErr) throw updErr;
+          await loadWorkers();
+        } catch (err) {
+          console.error(err);
+          alert('Не вдалося завантажити фото');
+        }
+      });
     });
 
     document.querySelectorAll('.toggle').forEach(t => {
