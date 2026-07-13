@@ -51,6 +51,14 @@
       <div class="page-h">Сьогодні</div>
       <div class="page-sub" id="page-sub">Завантаження...</div>
 
+      <div id="push-banner" class="push" style="display:none;align-items:center;justify-content:space-between;cursor:pointer;">
+        <div style="display:flex;gap:10px;align-items:flex-start;">
+          <div class="ic">🔔</div>
+          <div><b id="push-banner-title">Увімкнути сповіщення</b><br><span id="push-banner-sub">Нагадування про записи на завтра, за 2 год і за 30 хв</span></div>
+        </div>
+        <button class="btn btn-sm" id="push-toggle-btn" style="background:var(--cyan-500);border-color:var(--cyan-500);color:#04202F;font-weight:600;white-space:nowrap;">Увімкнути</button>
+      </div>
+
       <div id="jobs-list"></div>
     </div>
   </div>
@@ -66,19 +74,75 @@
 </div>
 
 <script type="module">
-  import { supabase, initPage, wireLoginForm, logout, formatTime, subscribeToTable } from './app.js';
+  import { supabase, initPage, wireLoginForm, logout, formatTime, subscribeToTable, getPushSubscriptionStatus, enablePushNotifications, disablePushNotifications, isIos, isStandaloneApp } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
 
+  let currentStaffForPush = null;
+
   initPage(async (staff) => {
+    currentStaffForPush = staff;
     await loadToday(staff);
+    await refreshPushBanner();
 
     // Realtime: якщо адмін або сайт мийки створить/змінить запис цього мийника —
     // список оновиться сам, без перезавантаження сторінки
     subscribeToTable('bookings-today-' + staff.id, 'bookings', `staff_id=eq.${staff.id}`, () => {
       loadToday(staff);
     });
+  });
+
+  async function refreshPushBanner() {
+    const banner = document.getElementById('push-banner');
+    const title = document.getElementById('push-banner-title');
+    const sub = document.getElementById('push-banner-sub');
+    const btn = document.getElementById('push-toggle-btn');
+
+    const status = await getPushSubscriptionStatus();
+
+    if (status === 'unsupported') {
+      banner.style.display = 'none';
+      return;
+    }
+
+    banner.style.display = 'flex';
+
+    if (status === 'subscribed') {
+      title.textContent = 'Сповіщення увімкнено';
+      sub.textContent = 'Ви отримуватимете нагадування про записи';
+      btn.textContent = 'Вимкнути';
+    } else if (isIos() && !isStandaloneApp()) {
+      title.textContent = 'Увімкнути сповіщення';
+      sub.textContent = 'Спочатку додайте застосунок на головний екран (Поділитися → На головний екран)';
+      btn.textContent = 'Увімкнути';
+    } else {
+      title.textContent = 'Увімкнути сповіщення';
+      sub.textContent = 'Нагадування про записи на завтра, за 2 год і за 30 хв';
+      btn.textContent = 'Увімкнути';
+    }
+  }
+
+  document.getElementById('push-toggle-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('push-toggle-btn');
+    const status = await getPushSubscriptionStatus();
+
+    if (status === 'subscribed') {
+      await disablePushNotifications(currentStaffForPush.id);
+      await refreshPushBanner();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Зачекайте...';
+    try {
+      await enablePushNotifications(currentStaffForPush.id);
+      await refreshPushBanner();
+    } catch (err) {
+      alert(err.message || 'Не вдалося увімкнути сповіщення');
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   async function loadToday(staff) {
