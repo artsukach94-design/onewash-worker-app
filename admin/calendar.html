@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WashOS — Календар</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="WashOS Admin">
+<meta name="theme-color" content="#0A1E30">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -115,6 +120,12 @@
     </div>
 
     <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="m-phone" placeholder="+380671112233"></div>
+    <div id="m-discount-info" style="display:none;background:var(--green-100);border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:var(--green-600);">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="m-apply-discount" checked style="width:16px;height:16px;">
+        У клієнта постійна знижка <b id="m-discount-percent">0</b>% — застосувати до цього запису
+      </label>
+    </div>
     <div class="form-group"><label>Ім'я клієнта (необов'язково)</label><input type="text" id="m-client-name"></div>
     <div class="form-group"><label>Номерний знак</label><input type="text" id="m-plate"></div>
     <div class="form-group"><label>Марка</label><select id="m-brand-select"></select></div>
@@ -154,6 +165,7 @@
   let currentLocationId = null;
   let selectedDate = new Date(); selectedDate.setHours(0, 0, 0, 0);
   let staffList = [], vehicleTypes = [], washTypes = [], boxList = [], extraServices = [], washPrices = [];
+  let currentClientDiscount = 0;
 
   // Популярні марки та моделі авто — з опцією "Інша", якщо потрібної немає в списку
   const CAR_BRANDS = {
@@ -310,6 +322,32 @@
     document.getElementById('m-vtype').addEventListener('change', recomputeTotal);
     extrasBox.addEventListener('change', recomputeTotal);
 
+    // ==== ЗНИЖКА КЛІЄНТА (пошук за телефоном) ====
+    currentClientDiscount = 0;
+    document.getElementById('m-phone').addEventListener('blur', lookupClientDiscount);
+    document.getElementById('m-apply-discount').addEventListener('change', recomputeTotal);
+
+    recomputeTotal();
+  }
+
+  async function lookupClientDiscount() {
+    const phone = document.getElementById('m-phone').value.trim();
+    const infoBox = document.getElementById('m-discount-info');
+    if (!phone) { currentClientDiscount = 0; infoBox.style.display = 'none'; recomputeTotal(); return; }
+
+    const { data: client } = await supabase
+      .from('clients').select('permanent_discount_percent')
+      .eq('phone', phone).eq('location_id', currentLocationId).maybeSingle();
+
+    currentClientDiscount = client?.permanent_discount_percent || 0;
+    if (currentClientDiscount > 0) {
+      document.getElementById('m-discount-percent').textContent = currentClientDiscount;
+      document.getElementById('m-apply-discount').checked = true;
+      infoBox.style.display = 'block';
+    } else {
+      infoBox.style.display = 'none';
+    }
+    document.getElementById('m-total-price').dataset.dirty = 'false';
     recomputeTotal();
   }
 
@@ -325,6 +363,12 @@
     document.querySelectorAll('#m-extras-box input:checked').forEach(cb => {
       total += Number(cb.dataset.price);
     });
+
+    const applyDiscount = document.getElementById('m-apply-discount').checked;
+    if (currentClientDiscount > 0 && applyDiscount) {
+      total = total * (1 - currentClientDiscount / 100);
+    }
+    total = Math.round(total * 100) / 100;
 
     priceInput.value = total;
   }
@@ -513,6 +557,8 @@
       document.getElementById('m-model-other-wrap').style.display = 'none';
       document.getElementById('m-prepaid').checked = false;
       document.getElementById('m-total-price').dataset.dirty = 'false';
+      document.getElementById('m-discount-info').style.display = 'none';
+      currentClientDiscount = 0;
       await loadDay();
 
     } catch (err) {
