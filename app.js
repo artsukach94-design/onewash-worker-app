@@ -91,7 +91,7 @@ function setAppIdentity(locationName, logoUrl) {
   const title = locationName || 'One Wash';
   document.title = title;
 
-  const iconHref = logoUrl || 'icon-192.png';
+  const iconHref = logoUrl || 'icon-v2-192.png';
 
   let favicon = document.querySelector('link[rel="icon"]');
   if (!favicon) { favicon = document.createElement('link'); favicon.rel = 'icon'; document.head.appendChild(favicon); }
@@ -118,7 +118,7 @@ function setAppIdentity(locationName, logoUrl) {
     theme_color: '#0A1E30',
     icons: [
       { src: iconHref, sizes: '192x192', type: 'image/png' },
-      { src: logoUrl || 'icon-512.png', sizes: '512x512', type: 'image/png' }
+      { src: logoUrl || 'icon-v2-512.png', sizes: '512x512', type: 'image/png' }
     ]
   };
   const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
