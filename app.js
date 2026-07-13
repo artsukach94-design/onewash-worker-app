@@ -77,7 +77,60 @@ export async function initPage(onLoggedIn) {
     initialsEl.textContent = (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
   }
 
+  // Назва і іконка на головному екрані — підтягуємо мийку (і її лого, якщо адмін завантажив)
+  const { data: location } = await supabase
+    .from('locations').select('name, logo_url').eq('id', staff.location_id).maybeSingle();
+  setAppIdentity(location?.name, location?.logo_url);
+
   await onLoggedIn(staff);
+}
+
+// Динамічно виставляє назву мийки та іконку (кастомне лого, якщо адмін його завантажив)
+// для favicon і "Додати на головний екран"
+function setAppIdentity(locationName, logoUrl) {
+  const title = locationName || 'One Wash';
+  document.title = title;
+
+  const iconHref = logoUrl || 'icon-192.png';
+
+  let favicon = document.querySelector('link[rel="icon"]');
+  if (!favicon) { favicon = document.createElement('link'); favicon.rel = 'icon'; document.head.appendChild(favicon); }
+  favicon.href = iconHref;
+
+  let appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+  if (!appleIcon) { appleIcon = document.createElement('link'); appleIcon.rel = 'apple-touch-icon'; document.head.appendChild(appleIcon); }
+  appleIcon.href = iconHref;
+
+  let metaTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (!metaTitle) {
+    metaTitle = document.createElement('meta');
+    metaTitle.name = 'apple-mobile-web-app-title';
+    document.head.appendChild(metaTitle);
+  }
+  metaTitle.content = title;
+
+  const manifest = {
+    name: title,
+    short_name: title,
+    start_url: 'index.html',
+    display: 'standalone',
+    background_color: '#0A1E30',
+    theme_color: '#0A1E30',
+    icons: [
+      { src: iconHref, sizes: '192x192', type: 'image/png' },
+      { src: logoUrl || 'icon-512.png', sizes: '512x512', type: 'image/png' }
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  let manifestLink = document.querySelector('link[rel="manifest"]');
+  if (!manifestLink) {
+    manifestLink = document.createElement('link');
+    manifestLink.rel = 'manifest';
+    document.head.appendChild(manifestLink);
+  }
+  manifestLink.href = url;
 }
 
 // Підключає обробник форми логіну (форма з id="login-form" має бути на сторінці)
