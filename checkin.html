@@ -43,6 +43,12 @@
           <div class="form-group"><label>Номерний знак</label><input type="text" id="plate" placeholder="ТН 1234 АА" required></div>
           <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="phone" placeholder="+380671112233" required></div>
         </div>
+        <div class="form-group" id="discount-info" style="display:none;background:var(--green-100);border-radius:8px;padding:9px 12px;margin-bottom:6px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--green-600);">
+            <input type="checkbox" id="apply-discount" checked style="width:16px;height:16px;">
+            У клієнта постійна знижка <b id="discount-percent">0</b>% — застосувати
+          </label>
+        </div>
         <div class="form-row">
           <div class="form-group"><label>Марка</label><select id="brand-select"></select></div>
           <div class="form-group"><label>Колір</label><input type="text" id="color" placeholder="Білий"></div>
@@ -121,6 +127,7 @@
 
   let currentStaff = null;
   let vehicleTypes = [], washTypes = [], washPrices = [], extraServices = [];
+  let currentClientDiscount = 0;
 
   // Популярні марки та моделі авто — з опцією "Інша", якщо потрібної немає в списку
   const CAR_BRANDS = {
@@ -273,6 +280,13 @@
 
     if (booking.clients) {
       document.getElementById('phone').value = booking.clients.phone || '';
+      currentClientDiscount = booking.clients.permanent_discount_percent || 0;
+      const infoBox = document.getElementById('discount-info');
+      if (currentClientDiscount > 0) {
+        document.getElementById('discount-percent').textContent = currentClientDiscount;
+        document.getElementById('apply-discount').checked = true;
+        infoBox.style.display = 'block';
+      }
     }
     if (booking.cars) {
       document.getElementById('plate').value = booking.cars.plate || '';
@@ -353,9 +367,38 @@
       total += Number(cb.dataset.price);
     });
 
+    const applyDiscountEl = document.getElementById('apply-discount');
+    if (currentClientDiscount > 0 && applyDiscountEl && applyDiscountEl.checked) {
+      total = total * (1 - currentClientDiscount / 100);
+    }
+    total = Math.round(total * 100) / 100;
+
     priceInput.value = total;
     return total;
   }
+
+  async function lookupClientDiscount() {
+    const phone = document.getElementById('phone').value.trim();
+    const infoBox = document.getElementById('discount-info');
+    if (!phone) { currentClientDiscount = 0; infoBox.style.display = 'none'; updateTotal(); return; }
+
+    const { data: client } = await supabase
+      .from('clients').select('permanent_discount_percent')
+      .eq('phone', phone).eq('location_id', currentStaff.location_id).maybeSingle();
+
+    currentClientDiscount = client?.permanent_discount_percent || 0;
+    if (currentClientDiscount > 0) {
+      document.getElementById('discount-percent').textContent = currentClientDiscount;
+      document.getElementById('apply-discount').checked = true;
+      infoBox.style.display = 'block';
+    } else {
+      infoBox.style.display = 'none';
+    }
+    document.getElementById('total-price').dataset.dirty = 'false';
+    updateTotal();
+  }
+  document.getElementById('phone').addEventListener('blur', lookupClientDiscount);
+  document.getElementById('apply-discount').addEventListener('change', updateTotal);
 
   document.getElementById('total-price').addEventListener('input', () => {
     document.getElementById('total-price').dataset.dirty = 'true';
