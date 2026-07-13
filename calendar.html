@@ -3,483 +3,133 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WashOS — Календар</title>
+<title>One Wash — Календар</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div id="login-view" style="display:none;">
-  <div class="login-box">
-    <h1>WashOS</h1>
-    <p>Вхід для адміністраторів</p>
-    <form id="login-form">
-      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
-      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
-      <button type="submit" class="submit-btn">Увійти</button>
-      <div class="login-error" id="login-error"></div>
-    </form>
-  </div>
-</div>
+<div class="shell">
 
-<div id="app-view" style="display:none;">
-  <div class="app">
-    <div class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">WS</div>
-        <div class="brand-text"><b>WashOS</b><span id="admin-name">—</span></div>
-      </div>
-      <div class="loc-switcher" id="loc-switcher">—</div>
-
-      <div class="nav-group">
-        <div class="nav-label">Робота</div>
-        <a class="nav-item" href="index.html">Дошка дня</a>
-        <a class="nav-item active" href="calendar.html">Календар записів</a>
-      </div>
-      <div class="nav-group">
-        <div class="nav-label">Керування мийкою</div>
-        <a class="nav-item" href="clients.html">Клієнти та авто</a>
-        <a class="nav-item" href="workers.html">Мийники</a>
-        <a class="nav-item" href="services.html">Послуги та ціни</a>
-      </div>
-      <div class="nav-group" id="platform-nav" style="display:none;">
-        <div class="nav-label">Платформа</div>
-        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
-      </div>
-
-      <div class="sidebar-foot">
-        <b id="footer-name">—</b>
-        <span class="logout-link" id="logout-btn">Вийти</span>
-      </div>
+  <div id="login-view" style="display:none;">
+    <div class="login-box">
+      <h1>One Wash</h1>
+      <p>Вхід для мийників</p>
+      <form id="login-form">
+        <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+        <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+        <button type="submit" class="submit-btn">Увійти</button>
+        <div class="login-error" id="login-error"></div>
+      </form>
     </div>
+  </div>
 
-    <div class="main">
-      <div class="topbar">
-        <div><h1>Календар записів</h1><div class="sub">Усі мийники цієї мийки</div></div>
-        <button class="btn btn-primary btn-sm" id="add-booking-btn">+ Забронювати вручну</button>
-      </div>
-      <div class="content" id="page-content">
-
-        <div class="panel">
-          <div class="panel-body">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-              <button class="btn btn-sm" id="prev-day">← Попередній день</button>
-              <b id="day-label" style="font-size:14px;">—</b>
-              <button class="btn btn-sm" id="next-day">Наступний день →</button>
-            </div>
-            <div id="bookings-list">Завантаження...</div>
-          </div>
+  <div id="app-view" style="display:none;">
+    <div class="topbar">
+      <div class="topbar-row">
+        <div class="who">
+          <div class="avatar" id="staff-initials">--</div>
+          <div><b id="staff-name">—</b><span>Мийник · One Wash</span></div>
         </div>
-
+        <button class="logout-btn" id="logout-btn">Вийти</button>
       </div>
+    </div>
+
+    <div class="content">
+      <div class="page-h">Календар записів</div>
+      <div class="page-sub">Лише перегляд ваших записів</div>
+
+      <div class="day-strip" id="day-strip"></div>
+
+      <div class="job-card" id="day-bookings" style="padding:4px 14px;"></div>
+      <p class="note-small">Записувати чи скасовувати може лише адміністратор</p>
     </div>
   </div>
-</div>
 
-<!-- МОДАЛКА РУЧНОГО БРОНЮВАННЯ -->
-<div id="booking-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;overflow-y:auto;padding:30px 0;">
-  <div style="background:var(--card);border-radius:12px;padding:20px;width:400px;max-height:90vh;overflow-y:auto;">
-    <h3 style="margin:0 0 14px;font-size:15px;">Новий запис вручну</h3>
-
-    <div class="form-group"><label>Мийник</label><select id="m-staff"></select></div>
-    <div class="form-group"><label>Бокс</label><select id="m-box"></select></div>
-    <div class="form-group"><label>Тип послуги</label><select id="m-washtype"></select></div>
-
-    <!-- ЗВИЧАЙНИЙ ЗАПИС: дата + час -->
-    <div id="m-normal-time">
-      <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="form-group"><label>Дата</label><input type="date" id="m-date"></div>
-        <div class="form-group"><label>Час</label><input type="time" id="m-time"></div>
-      </div>
-    </div>
-
-    <!-- ХІМЧИСТКА: тривалість -->
-    <div id="m-chemical-time" style="display:none;">
-      <div class="form-group">
-        <label>Тривалість бронювання боксу</label>
-        <select id="m-duration">
-          <option value="custom">За часом (з — по)</option>
-          <option value="1">Весь день (1 день)</option>
-          <option value="2">2 повні дні</option>
-          <option value="3">3 повні дні</option>
-        </select>
-      </div>
-      <div id="m-duration-custom" class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="form-group"><label>Початок</label><input type="date" id="m-start-date"></div>
-        <div class="form-group"><label>Час початку</label><input type="time" id="m-start-time"></div>
-        <div class="form-group"><label>Кінець</label><input type="date" id="m-end-date"></div>
-        <div class="form-group"><label>Час кінця</label><input type="time" id="m-end-time"></div>
-      </div>
-      <div id="m-duration-fullday" class="form-group" style="display:none;">
-        <label>Дата початку</label><input type="date" id="m-fullday-start">
-      </div>
-    </div>
-
-    <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="m-phone" placeholder="+380671112233"></div>
-    <div class="form-group"><label>Ім'я клієнта (необов'язково)</label><input type="text" id="m-client-name"></div>
-    <div class="form-group"><label>Номерний знак</label><input type="text" id="m-plate"></div>
-    <div class="form-group"><label>Марка</label><select id="m-brand-select"></select></div>
-    <div class="form-group" id="m-brand-other-wrap" style="display:none;"><label>Введіть марку</label><input type="text" id="m-brand-other"></div>
-    <div class="form-group"><label>Модель</label><select id="m-model-select"></select></div>
-    <div class="form-group" id="m-model-other-wrap" style="display:none;"><label>Введіть модель</label><input type="text" id="m-model-other"></div>
-    <div class="form-group"><label>Тип авто</label><select id="m-vtype"></select></div>
-
-    <div class="section-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin:16px 0 8px;">Додаткові послуги</div>
-    <div id="m-extras-box" style="border:1px solid var(--border);border-radius:10px;padding:2px 12px;"></div>
-
-    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;">
-      <input type="checkbox" id="m-prepaid" style="width:17px;height:17px;"> Передоплату вже отримано
-    </label>
-
-    <div style="display:flex;gap:8px;margin-top:16px;">
-      <button class="btn" style="flex:1;" id="m-cancel">Скасувати</button>
-      <button class="btn btn-primary" style="flex:1;" id="m-save">Підтвердити запис</button>
-    </div>
+  <div class="bottom-nav">
+    <a class="bn-item" href="index.html"><span class="ic">◧</span>Сьогодні</a>
+    <a class="bn-item" href="checkin.html"><span class="ic">＋</span>Реєстрація</a>
+    <a class="bn-item active" href="calendar.html"><span class="ic">▦</span>Календар</a>
+    <a class="bn-item" href="schedule.html"><span class="ic">📅</span>Мій графік</a>
   </div>
+
 </div>
 
 <script type="module">
-  import { supabase, initAdminPage, wireLoginForm, logout, formatTime } from './app.js';
+  import { supabase, initPage, wireLoginForm, logout, formatTime, formatDayShort, subscribeToTable } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
 
-  let currentLocationId = null;
-  let selectedDate = new Date(); selectedDate.setHours(0, 0, 0, 0);
-  let staffList = [], vehicleTypes = [], washTypes = [], boxList = [], extraServices = [];
+  let currentStaff = null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let selectedDate = new Date(today);
 
-  // Популярні марки та моделі авто — з опцією "Інша", якщо потрібної немає в списку
-  const CAR_BRANDS = {
-    'Toyota': ['Camry', 'Corolla', 'RAV4', 'Land Cruiser', 'Yaris'],
-    'Volkswagen': ['Golf', 'Passat', 'Tiguan', 'Polo', 'Jetta'],
-    'BMW': ['3 Series', '5 Series', 'X5', 'X3', '7 Series'],
-    'Mercedes-Benz': ['C-Class', 'E-Class', 'GLE', 'S-Class', 'A-Class'],
-    'Audi': ['A4', 'A6', 'Q5', 'Q7', 'A3'],
-    'Skoda': ['Octavia', 'Superb', 'Kodiaq', 'Fabia', 'Karoq'],
-    'Renault': ['Duster', 'Megane', 'Logan', 'Kadjar', 'Clio'],
-    'Hyundai': ['Tucson', 'Elantra', 'Santa Fe', 'i30', 'Sonata'],
-    'Kia': ['Sportage', 'Rio', 'Sorento', 'Ceed', 'Optima'],
-    'Nissan': ['Qashqai', 'X-Trail', 'Juke', 'Leaf', 'Almera'],
-    'Ford': ['Focus', 'Fusion', 'Kuga', 'Explorer', 'Fiesta'],
-    'Opel': ['Astra', 'Insignia', 'Corsa', 'Mokka', 'Vectra'],
-    'Peugeot': ['308', '3008', '508', '2008', '208'],
-    'Chevrolet': ['Aveo', 'Cruze', 'Lacetti', 'Captiva', 'Niva'],
-    'Honda': ['Civic', 'CR-V', 'Accord', 'HR-V', 'Pilot'],
-    'Mazda': ['3', '6', 'CX-5', 'CX-3', 'CX-9'],
-    'Mitsubishi': ['Outlander', 'ASX', 'Lancer', 'Pajero', 'Eclipse Cross'],
-    'Volvo': ['XC60', 'XC90', 'S60', 'V40', 'XC40'],
-    'Lexus': ['RX', 'NX', 'ES', 'GX', 'LX'],
-    'Land Rover': ['Range Rover', 'Discovery', 'Defender', 'Evoque'],
-    'Jeep': ['Grand Cherokee', 'Compass', 'Wrangler', 'Renegade'],
-    'Subaru': ['Forester', 'Outback', 'Impreza', 'XV'],
-    'Fiat': ['Tipo', '500', 'Panda', 'Doblo'],
-    'Citroen': ['C4', 'C3', 'Berlingo', 'C5 Aircross'],
-    'Mini': ['Cooper', 'Countryman', 'Clubman'],
-    'Porsche': ['Cayenne', 'Macan', 'Panamera', '911'],
-    'Jaguar': ['XF', 'XE', 'F-Pace', 'E-Pace'],
-    'Suzuki': ['Vitara', 'SX4', 'Swift', 'Jimny'],
-    'Dacia': ['Duster', 'Logan', 'Sandero'],
-    'Chery': ['Tiggo 7', 'Tiggo 4', 'Tiggo 8'],
-    'Geely': ['Coolray', 'Atlas', 'Emgrand']
-  };
+  initPage(async (staff) => {
+    currentStaff = staff;
+    renderDayStrip();
+    await loadDay(selectedDate);
 
-  function initBrandModelSelects(prefix) {
-    const brandSelect = document.getElementById(prefix + '-brand-select');
-    const brandOtherWrap = document.getElementById(prefix + '-brand-other-wrap');
-    const modelSelect = document.getElementById(prefix + '-model-select');
-    const modelOtherWrap = document.getElementById(prefix + '-model-other-wrap');
+    // Realtime: якщо запис цього мийника зміниться (адмін підтвердить, скасує тощо) —
+    // відкритий день сам оновиться
+    subscribeToTable('bookings-calendar-' + staff.id, 'bookings', `staff_id=eq.${staff.id}`, () => {
+      loadDay(selectedDate);
+    });
+  });
 
-    brandSelect.innerHTML = Object.keys(CAR_BRANDS).sort().map(b => `<option value="${b}">${b}</option>`).join('')
-      + '<option value="__other__">Інша марка…</option>';
-
-    function fillModels(brand) {
-      const models = CAR_BRANDS[brand] || [];
-      modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('')
-        + '<option value="__other__">Інша модель…</option>';
-      modelOtherWrap.style.display = 'none';
+  function renderDayStrip() {
+    const strip = document.getElementById('day-strip');
+    strip.innerHTML = '';
+    // тиждень: 3 дні до сьогодні + сьогодні + 3 дні після
+    for (let i = -3; i <= 3; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      const chip = document.createElement('div');
+      chip.className = 'day-chip' + (i === 0 ? ' sel' : '');
+      chip.innerHTML = `${formatDayShort(d)}<b>${d.getDate()}</b>`;
+      chip.addEventListener('click', () => {
+        strip.querySelectorAll('.day-chip').forEach(c => c.classList.remove('sel'));
+        chip.classList.add('sel');
+        selectedDate = d;
+        loadDay(d);
+      });
+      strip.appendChild(chip);
     }
-    fillModels(brandSelect.value);
-
-    brandSelect.addEventListener('change', () => {
-      brandOtherWrap.style.display = brandSelect.value === '__other__' ? 'block' : 'none';
-      if (brandSelect.value !== '__other__') fillModels(brandSelect.value);
-      else { modelSelect.innerHTML = '<option value="__other__">Інша модель…</option>'; modelOtherWrap.style.display = 'block'; }
-    });
-    modelSelect.addEventListener('change', () => {
-      modelOtherWrap.style.display = modelSelect.value === '__other__' ? 'block' : 'none';
-    });
   }
 
-  function getBrandModelValue(prefix) {
-    const brandSelect = document.getElementById(prefix + '-brand-select');
-    const modelSelect = document.getElementById(prefix + '-model-select');
-    const brand = brandSelect.value === '__other__'
-      ? document.getElementById(prefix + '-brand-other').value.trim()
-      : brandSelect.value;
-    const model = modelSelect.value === '__other__'
-      ? document.getElementById(prefix + '-model-other').value.trim()
-      : modelSelect.value;
-    return [brand, model].filter(Boolean).join(' ');
-  }
+  async function loadDay(date) {
+    const box = document.getElementById('day-bookings');
+    box.innerHTML = '<p style="font-size:12.5px;color:var(--text-2);padding:10px 0;">Завантаження...</p>';
 
-  initAdminPage(async (admin, locations, locationId) => {
-    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
-    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
-    currentLocationId = locationId;
-
-    await loadOptions();
-    await loadDay();
-  });
-
-  document.getElementById('prev-day').addEventListener('click', () => {
-    selectedDate.setDate(selectedDate.getDate() - 1);
-    loadDay();
-  });
-  document.getElementById('next-day').addEventListener('click', () => {
-    selectedDate.setDate(selectedDate.getDate() + 1);
-    loadDay();
-  });
-
-  async function loadOptions() {
-    const [{ data: staff }, { data: vt }, { data: wt }, { data: boxes }, { data: extras }] = await Promise.all([
-      supabase.from('staff').select('*').eq('location_id', currentLocationId).eq('is_active', true).order('full_name'),
-      supabase.from('vehicle_types').select('*').eq('location_id', currentLocationId).order('sort_order'),
-      supabase.from('wash_types').select('*').eq('location_id', currentLocationId).order('sort_order'),
-      supabase.from('wash_boxes').select('*').eq('location_id', currentLocationId).order('sort_order'),
-      supabase.from('extra_services').select('*').eq('location_id', currentLocationId).eq('is_active', true)
-    ]);
-    staffList = staff || [];
-    vehicleTypes = vt || [];
-    washTypes = wt || [];
-    boxList = boxes || [];
-    extraServices = extras || [];
-
-    document.getElementById('m-staff').innerHTML = staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
-    document.getElementById('m-vtype').innerHTML = vehicleTypes.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
-    document.getElementById('m-washtype').innerHTML = washTypes.map(w => `<option value="${w.id}" data-name="${w.name}">${w.name}</option>`).join('');
-    document.getElementById('m-box').innerHTML = boxList.length
-      ? boxList.map(b => `<option value="${b.id}">${b.name}</option>`).join('')
-      : '<option value="">Боксів не додано</option>';
-    initBrandModelSelects('m');
-
-    const extrasBox = document.getElementById('m-extras-box');
-    extrasBox.innerHTML = extraServices.length
-      ? extraServices.map(e => `
-          <label style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:12.5px;">
-            <input type="checkbox" data-id="${e.id}" data-price="${e.price}" style="width:17px;height:17px;">
-            <span style="flex:1;">${e.name}</span><span style="color:var(--text-2);">${e.price} грн</span>
-          </label>`).join('')
-      : '<p style="font-size:12px;color:var(--text-2);padding:10px 0;">Додаткові послуги не налаштовані</p>';
-
-    // за замовчуванням — сьогоднішній обраний день і поточний час +1 година
-    const defaultDate = selectedDate.toISOString().slice(0, 10);
-    document.getElementById('m-date').value = defaultDate;
-    document.getElementById('m-start-date').value = defaultDate;
-    document.getElementById('m-end-date').value = defaultDate;
-    document.getElementById('m-fullday-start').value = defaultDate;
-
-    document.getElementById('m-washtype').addEventListener('change', updateDurationMode);
-    updateDurationMode();
-
-    document.getElementById('m-duration').addEventListener('change', () => {
-      const val = document.getElementById('m-duration').value;
-      document.getElementById('m-duration-custom').style.display = val === 'custom' ? 'grid' : 'none';
-      document.getElementById('m-duration-fullday').style.display = val === 'custom' ? 'none' : 'block';
-    });
-  }
-
-  function updateDurationMode() {
-    const select = document.getElementById('m-washtype');
-    const selectedOption = select.options[select.selectedIndex];
-    const isChemical = selectedOption && selectedOption.dataset.name === 'Хімчистка';
-    document.getElementById('m-normal-time').style.display = isChemical ? 'none' : 'block';
-    document.getElementById('m-chemical-time').style.display = isChemical ? 'block' : 'none';
-  }
-
-  async function loadDay() {
-    document.getElementById('day-label').textContent =
-      selectedDate.toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
-
-    const start = new Date(selectedDate); start.setHours(0, 0, 0, 0);
-    const end = new Date(selectedDate); end.setHours(23, 59, 59, 999);
+    const start = new Date(date); start.setHours(0, 0, 0, 0);
+    const end = new Date(date); end.setHours(23, 59, 59, 999);
 
     const { data: bookings, error } = await supabase
       .from('bookings')
-      .select('*, cars(*), clients(*), wash_types(*), staff(full_name), wash_boxes(name)')
-      .eq('location_id', currentLocationId)
+      .select('*, cars(*), clients(*), wash_types(*)')
+      .eq('staff_id', currentStaff.id)
       .gte('scheduled_at', start.toISOString())
       .lte('scheduled_at', end.toISOString())
+      .not('status', 'in', '(cancelled,no_show)')
       .order('scheduled_at');
 
-    if (error) { console.error(error); return; }
+    if (error) { console.error(error); box.innerHTML = '<p>Помилка завантаження</p>'; return; }
 
-    const list = document.getElementById('bookings-list');
     if (bookings.length === 0) {
-      list.innerHTML = '<div class="empty-state">На цей день записів немає</div>';
+      box.innerHTML = '<div class="slot-row"><div class="slot-body slot-empty">Записів немає</div></div>';
       return;
     }
 
-    const statusLabels = { pending: 'Не підтверджено', confirmed: 'Заброньовано', in_progress: 'В процесі', done: 'Виконано', no_show: 'Не з\'явився', cancelled: 'Скасовано' };
-    const pillClasses = { pending: 'pending', confirmed: 'confirmed', in_progress: 'progress', done: 'done', no_show: 'no_show', cancelled: 'no_show' };
-
-    list.innerHTML = '';
+    box.innerHTML = '';
     bookings.forEach(b => {
-      const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.cars.plate || ''}` : 'Без даних авто';
-      const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
-      const staffLabel = b.staff?.full_name || 'Не призначено';
-      const washLabel = b.wash_types?.name || '';
-      const boxLabel = b.wash_boxes?.name ? ' · ' + b.wash_boxes.name : '';
-      const endLabel = b.scheduled_end ? ` (до ${new Date(b.scheduled_end).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })})` : '';
-
       const row = document.createElement('div');
-      row.className = 'sched-row';
-      const canCancel = !['cancelled', 'done', 'no_show'].includes(b.status);
-      const payClass = b.prepayment_status === 'paid' ? 'paid' : 'unpaid';
-      const payText = b.prepayment_status === 'paid' ? 'Передоплата ✓' : 'Не оплачено';
-      row.innerHTML = `
-        <div class="sched-time">${formatTime(b.scheduled_at)}${endLabel}</div>
-        <div class="sched-info"><b>${carLabel}</b><span>${clientLabel} · ${washLabel} · ${staffLabel}${boxLabel}</span></div>
-        <span class="pay-badge ${payClass} pay-toggle" data-id="${b.id}" data-status="${b.prepayment_status}" style="cursor:pointer;">${payText}</span>
-        <span class="pill ${pillClasses[b.status] || ''}">${statusLabels[b.status] || b.status}</span>
-        ${canCancel ? `<button class="btn btn-sm cancel-btn" data-id="${b.id}" style="margin-left:8px;color:var(--red-600);">Скасувати</button>` : ''}
-      `;
-      list.appendChild(row);
-    });
-
-    document.querySelectorAll('.cancel-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Скасувати цей запис?')) return;
-        await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', btn.dataset.id);
-        await loadDay();
-      });
-    });
-
-    document.querySelectorAll('.pay-toggle').forEach(badge => {
-      badge.addEventListener('click', async () => {
-        const newStatus = badge.dataset.status === 'paid' ? 'unpaid' : 'paid';
-        await supabase.from('bookings').update({ prepayment_status: newStatus }).eq('id', badge.dataset.id);
-        await loadDay();
-      });
+      row.className = 'slot-row';
+      const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.wash_types?.name || ''}` : (b.wash_types?.name || '');
+      const clientLabel = b.clients?.full_name || b.clients?.phone || '';
+      row.innerHTML = `<span class="slot-time">${formatTime(b.scheduled_at)}</span>
+                        <div class="slot-body"><b>${carLabel}</b><span>${clientLabel}</span></div>`;
+      box.appendChild(row);
     });
   }
-
-  // ==== РУЧНЕ БРОНЮВАННЯ ====
-  const modal = document.getElementById('booking-modal');
-  document.getElementById('add-booking-btn').addEventListener('click', () => modal.style.display = 'flex');
-  document.getElementById('m-cancel').addEventListener('click', () => modal.style.display = 'none');
-
-  document.getElementById('m-save').addEventListener('click', async () => {
-    const staffId = document.getElementById('m-staff').value;
-    const boxId = document.getElementById('m-box').value || null;
-    const washTypeId = document.getElementById('m-washtype').value;
-    const phone = document.getElementById('m-phone').value.trim();
-    const clientName = document.getElementById('m-client-name').value.trim();
-    const plate = document.getElementById('m-plate').value.trim();
-    const brand = getBrandModelValue('m');
-    const vtypeId = document.getElementById('m-vtype').value;
-    const isPrepaid = document.getElementById('m-prepaid').checked;
-
-    const selectedOption = document.getElementById('m-washtype').options[document.getElementById('m-washtype').selectedIndex];
-    const isChemical = selectedOption && selectedOption.dataset.name === 'Хімчистка';
-
-    if (!staffId || !phone) {
-      alert('Заповніть принаймні мийника і телефон клієнта');
-      return;
-    }
-
-    let scheduledAt, scheduledEnd = null;
-
-    if (isChemical) {
-      const duration = document.getElementById('m-duration').value;
-      if (duration === 'custom') {
-        const startDate = document.getElementById('m-start-date').value;
-        const startTime = document.getElementById('m-start-time').value;
-        const endDate = document.getElementById('m-end-date').value;
-        const endTime = document.getElementById('m-end-time').value;
-        if (!startDate || !startTime || !endDate || !endTime) {
-          alert('Заповніть дату і час початку та кінця'); return;
-        }
-        scheduledAt = new Date(`${startDate}T${startTime}:00`);
-        scheduledEnd = new Date(`${endDate}T${endTime}:00`);
-      } else {
-        const startDate = document.getElementById('m-fullday-start').value;
-        if (!startDate) { alert('Оберіть дату початку'); return; }
-        scheduledAt = new Date(`${startDate}T00:00:00`);
-        scheduledEnd = new Date(`${startDate}T00:00:00`);
-        scheduledEnd.setDate(scheduledEnd.getDate() + parseInt(duration, 10));
-        scheduledEnd.setSeconds(scheduledEnd.getSeconds() - 1);
-      }
-    } else {
-      const date = document.getElementById('m-date').value;
-      const time = document.getElementById('m-time').value;
-      if (!date || !time) { alert('Оберіть дату і час'); return; }
-      scheduledAt = new Date(`${date}T${time}:00`);
-    }
-
-    try {
-      let clientId;
-      const { data: existingClient } = await supabase
-        .from('clients').select('id').eq('phone', phone).eq('location_id', currentLocationId).maybeSingle();
-      if (existingClient) {
-        clientId = existingClient.id;
-        if (clientName) await supabase.from('clients').update({ full_name: clientName }).eq('id', clientId);
-      } else {
-        const { data: newClient, error: cErr } = await supabase
-          .from('clients').insert({ phone, full_name: clientName, location_id: currentLocationId }).select().single();
-        if (cErr) throw cErr;
-        clientId = newClient.id;
-      }
-
-      let carId = null;
-      if (plate) {
-        const { data: car, error: carErr } = await supabase
-          .from('cars').insert({ client_id: clientId, plate, brand_model: brand, vehicle_type_id: vtypeId }).select().single();
-        if (carErr) throw carErr;
-        carId = car.id;
-      }
-
-      // орієнтовна ціна: базова ціна типу авто/послуги + вибрані додаткові послуги
-      const { data: priceRow } = await supabase
-        .from('wash_prices').select('price').eq('wash_type_id', washTypeId).eq('vehicle_type_id', vtypeId).maybeSingle();
-      let total = priceRow ? Number(priceRow.price) : 0;
-      const checkedExtras = [...document.querySelectorAll('#m-extras-box input:checked')];
-      checkedExtras.forEach(cb => { total += Number(cb.dataset.price); });
-
-      const { data: booking, error: bErr } = await supabase.from('bookings').insert({
-        location_id: currentLocationId,
-        client_id: clientId,
-        car_id: carId,
-        staff_id: staffId,
-        box_id: boxId,
-        wash_type_id: washTypeId,
-        scheduled_at: scheduledAt.toISOString(),
-        scheduled_end: scheduledEnd ? scheduledEnd.toISOString() : null,
-        status: 'confirmed',
-        source: 'admin',
-        total_price: total,
-        prepayment_status: isPrepaid ? 'paid' : 'unpaid'
-      }).select().single();
-      if (bErr) throw bErr;
-
-      for (const cb of checkedExtras) {
-        await supabase.from('booking_extras').insert({
-          booking_id: booking.id, extra_service_id: cb.dataset.id, price: cb.dataset.price
-        });
-      }
-
-      modal.style.display = 'none';
-      ['m-phone', 'm-client-name', 'm-plate', 'm-brand-other', 'm-model-other', 'm-time', 'm-start-time', 'm-end-time'].forEach(id => {
-        const el = document.getElementById(id); if (el) el.value = '';
-      });
-      document.getElementById('m-brand-other-wrap').style.display = 'none';
-      document.getElementById('m-model-other-wrap').style.display = 'none';
-      document.getElementById('m-prepaid').checked = false;
-      await loadDay();
-
-    } catch (err) {
-      console.error(err);
-      alert('Помилка бронювання. Перевірте дані.');
-    }
-  });
 </script>
 </body>
 </html>
