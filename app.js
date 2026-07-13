@@ -175,3 +175,87 @@ export function subscribeToTable(channelName, table, filter, onChange) {
     .subscribe();
   return channel;
 }
+
+// ============================================================
+// PUSH-СПОВІЩЕННЯ
+// ============================================================
+
+// Публічний VAPID-ключ (не секретний, безпечно тримати в коді фронтенду)
+const VAPID_PUBLIC_KEY = 'BGn0uHVbBekOFhfzogg8ciGvlOZ_LHLe3JsrEAUOqCpXQR4W3evzojpcUF9r1AEslpsP3XNCfbX6PVnvKCAPJp0';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+export function isPushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window;
+}
+
+// iOS вимагає, щоб застосунок був доданий на головний екран (standalone),
+// інакше push просто не працюватиме, навіть якщо дозвіл надано
+export function isStandaloneApp() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+export function isIos() {
+  return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+}
+
+export async function getPushSubscriptionStatus() {
+  if (!isPushSupported()) return 'unsupported';
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) return 'not-subscribed';
+  const sub = await registration.pushManager.getSubscription();
+  return sub ? 'subscribed' : 'not-subscribed';
+}
+
+export async function enablePushNotifications(staffId) {
+  if (!isPushSupported()) {
+    throw new Error('Цей браузер не підтримує push-сповіщення');
+  }
+  if (isIos() && !isStandaloneApp()) {
+    throw new Error('На iPhone спочатку додайте застосунок на головний екран, потім увімкніть сповіщення');
+  }
+
+  const registration = await navigator.serviceWorker.register('sw.js');
+  await navigator.serviceWorker.ready;
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    throw new Error('Дозвіл на сповіщення не надано');
+  }
+
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+  }
+
+  const subJson = subscription.toJSON();
+  const { error } = await supabase.from('push_subscriptions').upsert({
+    staff_id: staffId,
+    endpoint: subJson.endpoint,
+    p256dh: subJson.keys.p256dh,
+    auth: subJson.keys.auth
+  }, { onConflict: 'endpoint' });
+  if (error) throw error;
+
+  return true;
+}
+
+export async function disablePushNotifications(staffId) {
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) return;
+  const subscription = await registration.pushManager.getSubscription();
+  if (subscription) {
+    await supabase.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
+    await subscription.unsubscribe();
+  }
+}
