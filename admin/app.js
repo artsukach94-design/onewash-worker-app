@@ -25,6 +25,44 @@ export function generatePassword() {
   return Math.random().toString(36).slice(-6) + Math.floor(10 + Math.random() * 90);
 }
 
+// Динамічно виставляє назву "{Мийка} Admin" і іконку для "Додати на головний екран"
+export function setAppIdentity(locationName) {
+  const title = locationName ? `${locationName} Admin` : 'WashOS Admin';
+  document.title = title;
+
+  let metaTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (!metaTitle) {
+    metaTitle = document.createElement('meta');
+    metaTitle.name = 'apple-mobile-web-app-title';
+    document.head.appendChild(metaTitle);
+  }
+  metaTitle.content = title;
+
+  // Динамічний manifest.json (для Android "Встановити застосунок")
+  const manifest = {
+    name: title,
+    short_name: title,
+    start_url: 'index.html',
+    display: 'standalone',
+    background_color: '#0A1E30',
+    theme_color: '#0A1E30',
+    icons: [
+      { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: 'icon-512.png', sizes: '512x512', type: 'image/png' }
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  let manifestLink = document.querySelector('link[rel="manifest"]');
+  if (!manifestLink) {
+    manifestLink = document.createElement('link');
+    manifestLink.rel = 'manifest';
+    document.head.appendChild(manifestLink);
+  }
+  manifestLink.href = url;
+}
+
 export async function getSession() {
   const { data: { session } } = await supabase.auth.getSession();
   return session;
@@ -138,6 +176,9 @@ export async function initAdminPage(onReady) {
 
   loginView.style.display = 'none';
   appView.style.display = 'block';
+
+  const currentLocation = locations.find(l => l.id === selectedId);
+  setAppIdentity(currentLocation?.name);
 
   const nameEl = document.getElementById('admin-name');
   if (nameEl) nameEl.textContent = admin.is_superadmin ? 'Суперадмін' : 'Адміністратор мийки';
