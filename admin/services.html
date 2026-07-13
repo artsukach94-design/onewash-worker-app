@@ -94,6 +94,18 @@
         </div>
 
         <div class="panel">
+          <div class="panel-head"><h3>Лого мийки</h3></div>
+          <div class="panel-body" style="display:flex;align-items:center;gap:18px;">
+            <img id="logo-preview" src="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;background:var(--bg);border:1px solid var(--border);display:none;">
+            <div style="flex:1;">
+              <p style="font-size:12.5px;color:var(--text-2);margin:0 0 8px;">Використовується як іконка при "Додати на головний екран" і favicon у вкладці браузера. Рекомендовано квадратне зображення, мінімум 192×192px.</p>
+              <input type="file" id="logo-file" accept="image/png,image/jpeg,image/svg+xml">
+              <button class="btn btn-primary btn-sm" id="upload-logo-btn" style="margin-top:8px;">Завантажити лого</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
           <div class="panel-head"><h3>Передоплата</h3></div>
           <div class="panel-body">
             <div class="form-group" style="max-width:220px;">
@@ -126,7 +138,7 @@
   });
 
   async function loadAll() {
-    await Promise.all([loadBoxes(), loadTypes(), loadExtras(), loadLocationSettings()]);
+    await Promise.all([loadBoxes(), loadTypes(), loadExtras(), loadLocationSettings(), loadLogo()]);
     renderPriceMatrix();
   }
 
@@ -317,6 +329,55 @@
     });
     if (error) { console.error(error); alert('Помилка додавання'); return; }
     await loadExtras();
+  });
+
+  // ==== ЛОГО МИЙКИ ====
+  async function loadLogo() {
+    const { data, error } = await supabase.from('locations').select('logo_url').eq('id', currentLocationId).single();
+    if (error) { console.error(error); return; }
+    if (data.logo_url) {
+      const preview = document.getElementById('logo-preview');
+      preview.src = data.logo_url;
+      preview.style.display = 'block';
+    }
+  }
+
+  document.getElementById('upload-logo-btn').addEventListener('click', async () => {
+    const file = document.getElementById('logo-file').files[0];
+    if (!file) { alert('Оберіть файл'); return; }
+
+    const btn = document.getElementById('upload-logo-btn');
+    btn.disabled = true;
+    btn.textContent = 'Завантажуємо...';
+
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `${currentLocationId}/logo.${ext}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('location-logos')
+        .upload(path, file, { upsert: true });
+      if (uploadErr) throw uploadErr;
+
+      const { data: publicUrlData } = supabase.storage.from('location-logos').getPublicUrl(path);
+      const logoUrl = publicUrlData.publicUrl + '?t=' + Date.now(); // уникаємо кешування старого лого браузером
+
+      const { error: updErr } = await supabase.from('locations').update({ logo_url: logoUrl }).eq('id', currentLocationId);
+      if (updErr) throw updErr;
+
+      const preview = document.getElementById('logo-preview');
+      preview.src = logoUrl;
+      preview.style.display = 'block';
+
+      alert('Лого завантажено. Оновіть сторінку, щоб побачити нову іконку в браузері.');
+
+    } catch (err) {
+      console.error(err);
+      alert('Помилка завантаження лого');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Завантажити лого';
+    }
   });
 
   // ==== ПЕРЕДОПЛАТА ====
