@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WashOS — Клієнти</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="WashOS Admin">
+<meta name="theme-color" content="#0A1E30">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -61,8 +66,8 @@
           <div class="panel-head"><h3>Список клієнтів</h3></div>
           <div class="panel-body" style="padding:0;">
             <table id="clients-table">
-              <tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th></th></tr>
-              <tr><td colspan="7" class="empty-state">Завантаження...</td></tr>
+              <tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th>Знижка, %</th><th></th></tr>
+              <tr><td colspan="8" class="empty-state">Завантаження...</td></tr>
             </table>
           </div>
         </div>
@@ -129,7 +134,7 @@
       return;
     }
 
-    table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th></th></tr>';
+    table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th>Знижка, %</th><th></th></tr>';
     clients.forEach(c => {
       const stats = statsByClient[c.id] || { done: 0, last: null };
       const carsLabel = c.cars.length
@@ -148,6 +153,7 @@
         <td>${lastVisit}</td>
         <td>${stats.done}</td>
         <td><b>${Number(c.cashback_balance || 0).toLocaleString('uk-UA')}</b></td>
+        <td><input type="text" value="${c.permanent_discount_percent || 0}" data-id="${c.id}" class="discount-input" style="width:56px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;text-align:right;"></td>
         <td><button class="btn btn-sm cashback-btn" data-id="${c.id}" data-name="${c.full_name || c.phone}" data-balance="${c.cashback_balance || 0}">Списати</button></td>
       `;
       table.appendChild(row);
@@ -156,6 +162,14 @@
     table.querySelectorAll('.name-input').forEach(input => {
       input.addEventListener('blur', async () => {
         await supabase.from('clients').update({ full_name: input.value.trim() }).eq('id', input.dataset.id);
+      });
+    });
+
+    table.querySelectorAll('.discount-input').forEach(input => {
+      input.addEventListener('blur', async () => {
+        const value = parseFloat(input.value);
+        if (isNaN(value) || value < 0 || value > 100) { alert('Знижка має бути числом від 0 до 100'); return; }
+        await supabase.from('clients').update({ permanent_discount_percent: value }).eq('id', input.dataset.id);
       });
     });
 
