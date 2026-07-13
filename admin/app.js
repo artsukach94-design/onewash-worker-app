@@ -25,10 +25,20 @@ export function generatePassword() {
   return Math.random().toString(36).slice(-6) + Math.floor(10 + Math.random() * 90);
 }
 
-// Динамічно виставляє назву "{Мийка} Admin" і іконку для "Додати на головний екран"
-export function setAppIdentity(locationName) {
+// Динамічно виставляє назву "{Мийка} Admin", іконку (кастомне лого, якщо є) і favicon
+export function setAppIdentity(locationName, logoUrl) {
   const title = locationName ? `${locationName} Admin` : 'WashOS Admin';
   document.title = title;
+
+  const iconHref = logoUrl || 'icon-192.png';
+
+  let favicon = document.querySelector('link[rel="icon"]');
+  if (!favicon) { favicon = document.createElement('link'); favicon.rel = 'icon'; document.head.appendChild(favicon); }
+  favicon.href = iconHref;
+
+  let appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+  if (!appleIcon) { appleIcon = document.createElement('link'); appleIcon.rel = 'apple-touch-icon'; document.head.appendChild(appleIcon); }
+  appleIcon.href = iconHref;
 
   let metaTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
   if (!metaTitle) {
@@ -47,8 +57,8 @@ export function setAppIdentity(locationName) {
     background_color: '#0A1E30',
     theme_color: '#0A1E30',
     icons: [
-      { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-      { src: 'icon-512.png', sizes: '512x512', type: 'image/png' }
+      { src: iconHref, sizes: '192x192', type: 'image/png' },
+      { src: logoUrl || 'icon-512.png', sizes: '512x512', type: 'image/png' }
     ]
   };
   const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
@@ -178,7 +188,7 @@ export async function initAdminPage(onReady) {
   appView.style.display = 'block';
 
   const currentLocation = locations.find(l => l.id === selectedId);
-  setAppIdentity(currentLocation?.name);
+  setAppIdentity(currentLocation?.name, currentLocation?.logo_url);
 
   const nameEl = document.getElementById('admin-name');
   if (nameEl) nameEl.textContent = admin.is_superadmin ? 'Суперадмін' : 'Адміністратор мийки';
