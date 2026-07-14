@@ -27,7 +27,7 @@ export function generatePassword() {
 
 // Динамічно виставляє назву "{Мийка} Admin", іконку (кастомне лого, якщо є) і favicon
 export function setAppIdentity(locationName, logoUrl) {
-  const title = locationName ? `${locationName} Admin` : 'WashOS Admin';
+  const title = locationName ? `${locationName} Admin` : 'Mage Wash Admin';
   document.title = title;
 
   const iconHref = logoUrl || 'icon-192.png';
