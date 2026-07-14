@@ -267,7 +267,7 @@
       .eq('staff_id', currentStaff.id)
       .gte('scheduled_at', start.toISOString())
       .lte('scheduled_at', end.toISOString())
-      .in('status', ['pending', 'confirmed', 'in_progress'])
+      .in('status', ['pending', 'confirmed'])
       .order('scheduled_at');
 
     if (error || !bookings || bookings.length === 0) {
