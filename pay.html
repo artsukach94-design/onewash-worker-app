@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Оплата — Mage Wash</title>
+<style>
+  :root{
+    --navy-950:#0A1E30; --navy-900:#0F2A43;
+    --cyan-500:#2EA8DF; --cyan-600:#1C8FC2; --cyan-100:#E4F4FC;
+    --green-600:#2F9E62; --red-600:#D64545;
+    --bg:#F3F6F9; --card:#FFFFFF; --border:#E2E8F0;
+    --text-1:#16232F; --text-2:#5B6B7C; --text-3:#93A2AF;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text-1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;display:flex;justify-content:center;padding:24px 16px;min-height:100vh;}
+  .wrap{max-width:420px;width:100%;}
+  .header{background:var(--navy-950);color:#EAF2F8;border-radius:16px;padding:20px;text-align:center;margin-bottom:16px;}
+  .header img{width:48px;height:48px;border-radius:12px;object-fit:cover;margin-bottom:10px;}
+  .header h1{font-size:16px;margin:0;}
+  .header span{font-size:12px;color:#9FC3DC;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:14px;}
+  .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px;}
+  .row:last-child{border-bottom:none;}
+  .row span:first-child{color:var(--text-2);}
+  .row b{font-weight:600;}
+  .total-box{background:var(--navy-950);color:#fff;border-radius:14px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .total-box .t{font-size:12.5px;color:#9FC3DC;}
+  .total-box .v{font-size:24px;font-weight:700;}
+  .form-group{margin-bottom:12px;}
+  .form-group label{display:block;font-size:12px;font-weight:500;color:var(--text-2);margin-bottom:5px;}
+  input[type=text]{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-size:13.5px;font-family:inherit;}
+  .pay-btn{width:100%;padding:15px;border:none;border-radius:14px;background:var(--cyan-500);color:#04202F;font-weight:700;font-size:15px;cursor:pointer;margin-top:6px;}
+  .pay-btn:disabled{background:#C9DCE6;color:#7C93A0;cursor:not-allowed;}
+  .note{font-size:11.5px;color:var(--text-3);text-align:center;margin-top:12px;}
+  .state-box{text-align:center;padding:60px 20px;color:var(--text-2);font-size:14px;}
+  .error-box{background:#FBE7E7;color:var(--red-600);border-radius:12px;padding:14px 16px;font-size:13px;text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="wrap">
+  <div class="state-box" id="loading-state">Завантаження…</div>
+</div>
+
+<script>
+  // ==== НАЛАШТУВАННЯ — ЗАМІНІТЬ НА СВОЇ ====
+  const SUPABASE_URL = 'https://elrmeekxaxcyxdyzqtzg.supabase.co';
+  const FUNCTIONS_URL = SUPABASE_URL + '/functions/v1';
+
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get('ref');
+
+  async function init() {
+    const wrap = document.getElementById('wrap');
+    if (!ref) {
+      wrap.innerHTML = '<div class="error-box">Посилання некоректне — не вказано параметр ref.</div>';
+      return;
+    }
+
+    try {
+      const res = await fetch(FUNCTIONS_URL + '/get-payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ref })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        wrap.innerHTML = `<div class="error-box">${data.error || 'Помилка завантаження'}</div>`;
+        return;
+      }
+
+      if (data.status === 'paid') {
+        wrap.innerHTML = '<div class="card" style="text-align:center;"><h2 style="color:var(--green-600);">Вже оплачено ✓</h2><p style="color:var(--text-2);font-size:13px;">Це посилання вже було успішно оплачено раніше.</p></div>';
+        return;
+      }
+      if (data.status !== 'pending') {
+        wrap.innerHTML = '<div class="error-box">Це посилання більше не активне.</div>';
+        return;
+      }
+
+      renderForm(data);
+
+    } catch (e) {
+      wrap.innerHTML = '<div class="error-box">Не вдалося завантажити дані оплати. Спробуйте оновити сторінку.</div>';
+    }
+  }
+
+  function renderForm(data) {
+    const dateLabel = data.scheduledAt
+      ? new Date(data.scheduledAt).toLocaleString('uk-UA', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+      : null;
+
+    document.getElementById('wrap').innerHTML = `
+      <div class="header">
+        ${data.locationLogo ? `<img src="${data.locationLogo}">` : ''}
+        <h1>${data.locationName}</h1>
+        <span>Онлайн-оплата запису на мийку</span>
+      </div>
+
+      <div class="card">
+        ${data.washTypeName ? `<div class="row"><span>Послуга</span><b>${data.washTypeName}</b></div>` : ''}
+        ${data.brandModel || data.plate ? `<div class="row"><span>Авто</span><b>${[data.brandModel, data.plate].filter(Boolean).join(' · ')}</b></div>` : ''}
+        ${dateLabel ? `<div class="row"><span>Дата запису</span><b>${dateLabel}</b></div>` : ''}
+        ${data.notes ? `<div class="row"><span>Нотатка</span><b>${data.notes}</b></div>` : ''}
+      </div>
+
+      <div class="card">
+        <div class="form-group"><label>Ваше ім'я</label><input type="text" id="pay-name" value="${data.clientName || ''}" placeholder="Ім'я та прізвище"></div>
+        <div class="form-group"><label>Телефон</label><input type="text" id="pay-phone" value="${data.clientPhone || ''}" disabled style="background:#F3F6F9;color:var(--text-2);"></div>
+      </div>
+
+      <div class="total-box">
+        <div><div class="t">До оплати</div><div class="v">${Number(data.amount).toLocaleString('uk-UA')} грн</div></div>
+      </div>
+
+      <button class="pay-btn" id="pay-btn">Оплатити через WayForPay</button>
+      <p class="note">Оплата обробляється захищеним сервісом WayForPay. Дані картки не передаються і не зберігаються на нашій стороні.</p>
+    `;
+
+    document.getElementById('pay-btn').addEventListener('click', () => startPayment(data.orderReference));
+  }
+
+  async function startPayment(orderReference) {
+    const btn = document.getElementById('pay-btn');
+    btn.disabled = true;
+    btn.textContent = 'Готуємо оплату…';
+
+    try {
+      const res = await fetch(FUNCTIONS_URL + '/create-wayforpay-signature', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderReference })
+      });
+      const fields = await res.json();
+
+      if (!res.ok) {
+        alert(fields.error || 'Не вдалося підготувати оплату');
+        btn.disabled = false;
+        btn.textContent = 'Оплатити через WayForPay';
+        return;
+      }
+
+      // Будуємо форму й одразу відправляємо її на WayForPay (стандартний спосіб їхнього віджета)
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = 'https://secure.wayforpay.com/pay';
+      form.acceptCharset = 'utf-8';
+
+      function addField(name, value) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      }
+
+      addField('merchantAccount', fields.merchantAccount);
+      addField('merchantAuthType', 'SimpleSignature');
+      addField('merchantDomainName', fields.merchantDomainName);
+      addField('merchantSignature', fields.merchantSignature);
+      addField('orderReference', fields.orderReference);
+      addField('orderDate', fields.orderDate);
+      addField('amount', fields.amount);
+      addField('currency', fields.currency);
+      fields.productName.forEach(v => addField('productName[]', v));
+      fields.productPrice.forEach(v => addField('productPrice[]', v));
+      fields.productCount.forEach(v => addField('productCount[]', v));
+      addField('returnUrl', fields.returnUrl);
+      addField('serviceUrl', fields.serviceUrl);
+
+      const nameVal = document.getElementById('pay-name').value.trim();
+      if (nameVal) {
+        const parts = nameVal.split(' ');
+        addField('clientFirstName', parts[0] || '');
+        addField('clientLastName', parts.slice(1).join(' ') || '');
+      }
+      const phoneVal = document.getElementById('pay-phone').value.trim();
+      if (phoneVal) addField('clientPhone', phoneVal);
+
+      document.body.appendChild(form);
+      form.submit();
+
+    } catch (e) {
+      alert('Помилка підготовки оплати. Спробуйте ще раз.');
+      btn.disabled = false;
+      btn.textContent = 'Оплатити через WayForPay';
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>
