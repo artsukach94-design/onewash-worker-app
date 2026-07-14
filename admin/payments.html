@@ -87,20 +87,49 @@
 </div>
 
 <!-- МОДАЛКА СТВОРЕННЯ ПОСИЛАННЯ -->
-<div id="link-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
-  <div style="background:var(--card);border-radius:12px;padding:20px;width:380px;max-height:85vh;overflow-y:auto;">
+<div id="link-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;overflow-y:auto;padding:30px 0;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:400px;max-height:90vh;overflow-y:auto;">
     <h3 style="margin:0 0 14px;font-size:15px;">Нове посилання на оплату</h3>
 
     <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="l-phone" placeholder="+380671112233"></div>
-    <div class="form-group"><label>Ім'я клієнта (необов'язково)</label><input type="text" id="l-name"></div>
+    <div id="l-client-found" style="display:none;background:var(--cyan-100);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--cyan-600);"></div>
+    <div class="form-group"><label>Ім'я клієнта</label><input type="text" id="l-name"></div>
+
     <div class="form-group"><label>Мийник</label><select id="l-staff"><option value="">Не призначено</option></select></div>
-    <div class="form-group"><label>Тип послуги (необов'язково)</label><select id="l-washtype"><option value="">Не вказано</option></select></div>
-    <div class="form-group"><label>Тип авто (необов'язково)</label><select id="l-vtype"><option value="">Не вказано</option></select></div>
+    <div class="form-group"><label>Бокс</label><select id="l-box"><option value="">Не вказано</option></select></div>
+
+    <div class="form-group"><label>Номерний знак</label><input type="text" id="l-plate"></div>
+    <div class="form-group"><label>Марка</label><select id="l-brand-select"></select></div>
+    <div class="form-group" id="l-brand-other-wrap" style="display:none;"><label>Введіть марку</label><input type="text" id="l-brand-other"></div>
+    <div class="form-group"><label>Модель</label><select id="l-model-select"></select></div>
+    <div class="form-group" id="l-model-other-wrap" style="display:none;"><label>Введіть модель</label><input type="text" id="l-model-other"></div>
+    <div class="form-group"><label>Колір</label><input type="text" id="l-color"></div>
+
+    <div class="form-group"><label>Тип авто</label><select id="l-vtype"></select></div>
+    <div class="form-group"><label>Тип послуги</label><select id="l-washtype"></select></div>
+
+    <div class="section-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin:14px 0 8px;">Додаткові послуги</div>
+    <div id="l-extras-box" style="border:1px solid var(--border);border-radius:10px;padding:2px 12px;"></div>
+
+    <div id="l-discount-info" style="display:none;background:var(--green-100);border-radius:8px;padding:9px 12px;margin-top:12px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--green-600);">
+        <input type="checkbox" id="l-apply-discount" checked style="width:16px;height:16px;">
+        У клієнта постійна знижка <b id="l-discount-percent">0</b>% — застосувати
+      </label>
+    </div>
+
+    <div class="form-group" style="margin-top:12px;">
+      <label>Сума до оплати, грн <span style="font-weight:400;color:var(--text-3);">(авто, можна змінити)</span></label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="l-amount" style="flex:1;">
+        <button class="btn btn-sm" id="l-recalc" type="button" title="Перерахувати автоматично">↻</button>
+      </div>
+    </div>
+
     <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <div class="form-group"><label>Дата запису</label><input type="date" id="l-date"></div>
       <div class="form-group"><label>Час</label><input type="time" id="l-time"></div>
     </div>
-    <div class="form-group"><label>Сума до оплати, грн</label><input type="text" id="l-amount" value="200"></div>
     <div class="form-group"><label>Нотатки (необов'язково)</label><textarea id="l-notes"></textarea></div>
 
     <div style="display:flex;gap:8px;margin-top:10px;">
@@ -117,6 +146,7 @@
   document.getElementById('logout-btn').addEventListener('click', logout);
 
   let currentLocationId = null;
+  let staffList = [], washTypes = [], vehicleTypes = [], boxList = [], extraServices = [], washPrices = [];
 
   // Визначаємо "slug" мийки з поточної адреси (наприклад /onewash/admin/payments.html → onewash),
   // щоб посилання на оплату вело саме на публічну сторінку тієї ж мийки
@@ -150,18 +180,189 @@
   });
 
   async function loadOptions() {
-    const [{ data: staff }, { data: wt }, { data: vt }] = await Promise.all([
+    const [{ data: staff }, { data: wt }, { data: vt }, { data: boxes }, { data: extras }, { data: prices }] = await Promise.all([
       supabase.from('staff').select('*').eq('location_id', currentLocationId).eq('is_active', true).order('full_name'),
       supabase.from('wash_types').select('*').eq('location_id', currentLocationId).order('sort_order'),
-      supabase.from('vehicle_types').select('*').eq('location_id', currentLocationId).order('sort_order')
+      supabase.from('vehicle_types').select('*').eq('location_id', currentLocationId).order('sort_order'),
+      supabase.from('wash_boxes').select('*').eq('location_id', currentLocationId).order('sort_order'),
+      supabase.from('extra_services').select('*').eq('location_id', currentLocationId).eq('is_active', true),
+      supabase.from('wash_prices').select('*')
     ]);
+    staffList = staff || [];
+    washTypes = wt || [];
+    vehicleTypes = vt || [];
+    boxList = boxes || [];
+    extraServices = extras || [];
+    washPrices = prices || [];
+
     document.getElementById('l-staff').innerHTML = '<option value="">Не призначено</option>' +
-      (staff || []).map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
-    document.getElementById('l-washtype').innerHTML = '<option value="">Не вказано</option>' +
-      (wt || []).map(w => `<option value="${w.id}">${w.name}</option>`).join('');
-    document.getElementById('l-vtype').innerHTML = '<option value="">Не вказано</option>' +
-      (vt || []).map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+      staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
+    document.getElementById('l-box').innerHTML = '<option value="">Не вказано</option>' +
+      boxList.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    document.getElementById('l-washtype').innerHTML =
+      washTypes.map(w => `<option value="${w.id}" data-name="${w.name}">${w.name}</option>`).join('');
+    document.getElementById('l-vtype').innerHTML =
+      vehicleTypes.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+
+    initBrandModelSelects();
+
+    const extrasBox = document.getElementById('l-extras-box');
+    extrasBox.innerHTML = extraServices.length
+      ? extraServices.map(e => `
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:12.5px;">
+            <input type="checkbox" data-id="${e.id}" data-price="${e.price}" style="width:17px;height:17px;">
+            <span style="flex:1;">${e.name}</span><span style="color:var(--text-2);">${e.price} грн</span>
+          </label>`).join('')
+      : '<p style="font-size:12px;color:var(--text-2);padding:10px 0;">Додаткові послуги не налаштовані</p>';
+
+    extrasBox.addEventListener('change', recomputeAmount);
+    document.getElementById('l-washtype').addEventListener('change', recomputeAmount);
+    document.getElementById('l-vtype').addEventListener('change', recomputeAmount);
+
+    const amountInput = document.getElementById('l-amount');
+    amountInput.dataset.dirty = 'false';
+    amountInput.addEventListener('input', () => { amountInput.dataset.dirty = 'true'; });
+    document.getElementById('l-recalc').addEventListener('click', () => {
+      amountInput.dataset.dirty = 'false';
+      recomputeAmount();
+    });
   }
+
+  // Популярні марки та моделі авто — з опцією "Інша"
+  const CAR_BRANDS = {
+    'Toyota': ['Camry', 'Corolla', 'RAV4', 'Land Cruiser', 'Yaris'],
+    'Volkswagen': ['Golf', 'Passat', 'Tiguan', 'Polo', 'Jetta'],
+    'BMW': ['3 Series', '5 Series', 'X5', 'X3', '7 Series'],
+    'Mercedes-Benz': ['C-Class', 'E-Class', 'GLE', 'S-Class', 'A-Class'],
+    'Audi': ['A4', 'A6', 'Q5', 'Q7', 'A3'],
+    'Skoda': ['Octavia', 'Superb', 'Kodiaq', 'Fabia', 'Karoq'],
+    'Renault': ['Duster', 'Megane', 'Logan', 'Kadjar', 'Clio'],
+    'Hyundai': ['Tucson', 'Elantra', 'Santa Fe', 'i30', 'Sonata'],
+    'Kia': ['Sportage', 'Rio', 'Sorento', 'Ceed', 'Optima'],
+    'Nissan': ['Qashqai', 'X-Trail', 'Juke', 'Leaf', 'Almera'],
+    'Ford': ['Focus', 'Fusion', 'Kuga', 'Explorer', 'Fiesta'],
+    'Jaguar': ['XF', 'XE', 'F-Pace', 'E-Pace'],
+    'Volvo': ['XC60', 'XC90', 'S60', 'V40', 'XC40'],
+    'Lexus': ['RX', 'NX', 'ES', 'GX', 'LX']
+  };
+
+  function fillModelsFor(brand) {
+    const modelSelect = document.getElementById('l-model-select');
+    const models = CAR_BRANDS[brand] || [];
+    modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('') + '<option value="__other__">Інша модель…</option>';
+    document.getElementById('l-model-other-wrap').style.display = 'none';
+  }
+
+  function initBrandModelSelects() {
+    const brandSelect = document.getElementById('l-brand-select');
+    brandSelect.innerHTML = Object.keys(CAR_BRANDS).sort().map(b => `<option value="${b}">${b}</option>`).join('') + '<option value="__other__">Інша марка…</option>';
+    fillModelsFor(brandSelect.value);
+
+    brandSelect.addEventListener('change', () => {
+      document.getElementById('l-brand-other-wrap').style.display = brandSelect.value === '__other__' ? 'block' : 'none';
+      if (brandSelect.value !== '__other__') fillModelsFor(brandSelect.value);
+      else {
+        document.getElementById('l-model-select').innerHTML = '<option value="__other__">Інша модель…</option>';
+        document.getElementById('l-model-other-wrap').style.display = 'block';
+      }
+    });
+    document.getElementById('l-model-select').addEventListener('change', () => {
+      document.getElementById('l-model-other-wrap').style.display = document.getElementById('l-model-select').value === '__other__' ? 'block' : 'none';
+    });
+  }
+
+  function getBrandModelValue() {
+    const brandSelect = document.getElementById('l-brand-select');
+    const modelSelect = document.getElementById('l-model-select');
+    const brand = brandSelect.value === '__other__' ? document.getElementById('l-brand-other').value.trim() : brandSelect.value;
+    const model = modelSelect.value === '__other__' ? document.getElementById('l-model-other').value.trim() : modelSelect.value;
+    return [brand, model].filter(Boolean).join(' ');
+  }
+
+  function setBrandModelFromString(fullText) {
+    if (!fullText) return;
+    const brands = Object.keys(CAR_BRANDS).sort((a, b) => b.length - a.length);
+    const match = brands.find(b => fullText === b || fullText.startsWith(b + ' '));
+    if (match) {
+      document.getElementById('l-brand-select').value = match;
+      document.getElementById('l-brand-other-wrap').style.display = 'none';
+      fillModelsFor(match);
+      const model = fullText.slice(match.length).trim();
+      const modelSelect = document.getElementById('l-model-select');
+      const hasModel = [...modelSelect.options].some(o => o.value === model);
+      if (model && hasModel) modelSelect.value = model;
+      else if (model) {
+        modelSelect.value = '__other__';
+        document.getElementById('l-model-other-wrap').style.display = 'block';
+        document.getElementById('l-model-other').value = model;
+      }
+    } else {
+      document.getElementById('l-brand-select').value = '__other__';
+      document.getElementById('l-brand-other-wrap').style.display = 'block';
+      document.getElementById('l-brand-other').value = fullText;
+    }
+  }
+
+  // ==== АВТОРОЗРАХУНОК ЦІНИ ЗІ ЗНИЖКОЮ ====
+  let currentClientDiscount = 0;
+
+  function recomputeAmount() {
+    const amountInput = document.getElementById('l-amount');
+    if (amountInput.dataset.dirty === 'true') return;
+
+    const washTypeId = document.getElementById('l-washtype').value;
+    const vtypeId = document.getElementById('l-vtype').value;
+    const priceRow = washPrices.find(p => p.wash_type_id === washTypeId && p.vehicle_type_id === vtypeId);
+    let total = priceRow ? Number(priceRow.price) : 0;
+
+    document.querySelectorAll('#l-extras-box input:checked').forEach(cb => { total += Number(cb.dataset.price); });
+
+    const applyDiscount = document.getElementById('l-apply-discount').checked;
+    if (currentClientDiscount > 0 && applyDiscount) total = total * (1 - currentClientDiscount / 100);
+
+    amountInput.value = Math.round(total * 100) / 100;
+  }
+  document.getElementById('l-apply-discount').addEventListener('change', recomputeAmount);
+
+  // ==== АВТОПОШУК КЛІЄНТА ЗА ТЕЛЕФОНОМ ====
+  document.getElementById('l-phone').addEventListener('blur', async () => {
+    const phone = document.getElementById('l-phone').value.trim();
+    const foundBox = document.getElementById('l-client-found');
+    if (!phone) { foundBox.style.display = 'none'; return; }
+
+    const { data: client } = await supabase
+      .from('clients').select('*, cars(*)')
+      .eq('phone', phone).eq('location_id', currentLocationId).maybeSingle();
+
+    if (!client) {
+      foundBox.style.display = 'none';
+      currentClientDiscount = 0;
+      document.getElementById('l-discount-info').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('l-name').value = client.full_name || '';
+    currentClientDiscount = client.permanent_discount_percent || 0;
+    if (currentClientDiscount > 0) {
+      document.getElementById('l-discount-percent').textContent = currentClientDiscount;
+      document.getElementById('l-apply-discount').checked = true;
+      document.getElementById('l-discount-info').style.display = 'block';
+    }
+
+    if (client.cars && client.cars.length > 0) {
+      const car = client.cars[client.cars.length - 1]; // останнє додане авто
+      document.getElementById('l-plate').value = car.plate || '';
+      setBrandModelFromString(car.brand_model || '');
+      document.getElementById('l-color').value = car.color || '';
+      if (car.vehicle_type_id) document.getElementById('l-vtype').value = car.vehicle_type_id;
+      foundBox.textContent = `✅ Знайдено клієнта: ${client.full_name || phone} · авто підтягнуто (${client.cars.length} шт. на акаунті, показано останнє)`;
+    } else {
+      foundBox.textContent = `✅ Знайдено клієнта: ${client.full_name || phone}, авто ще не зареєстровано`;
+    }
+    foundBox.style.display = 'block';
+    document.getElementById('l-amount').dataset.dirty = 'false';
+    recomputeAmount();
+  });
 
   function generateOrderRef() {
     return 'MW-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -235,12 +436,17 @@
     const phone = document.getElementById('l-phone').value.trim();
     const name = document.getElementById('l-name').value.trim();
     const staffId = document.getElementById('l-staff').value || null;
-    const washTypeId = document.getElementById('l-washtype').value || null;
+    const boxId = document.getElementById('l-box').value || null;
+    const plate = document.getElementById('l-plate').value.trim();
+    const brandModel = getBrandModelValue();
+    const color = document.getElementById('l-color').value.trim();
     const vtypeId = document.getElementById('l-vtype').value || null;
+    const washTypeId = document.getElementById('l-washtype').value || null;
     const date = document.getElementById('l-date').value;
     const time = document.getElementById('l-time').value;
     const amount = parseFloat(document.getElementById('l-amount').value);
     const notes = document.getElementById('l-notes').value.trim();
+    const applyDiscount = document.getElementById('l-apply-discount').checked;
 
     if (!phone || isNaN(amount) || amount <= 0) {
       alert('Вкажіть принаймні телефон клієнта і коректну суму');
@@ -250,6 +456,10 @@
     let scheduledAt = null;
     if (date && time) scheduledAt = new Date(`${date}T${time}:00`).toISOString();
 
+    const checkedExtras = [...document.querySelectorAll('#l-extras-box input:checked')].map(cb => ({
+      extra_service_id: cb.dataset.id, price: Number(cb.dataset.price)
+    }));
+
     const orderReference = generateOrderRef();
 
     const { error } = await supabase.from('payment_links').insert({
@@ -257,20 +467,31 @@
       order_reference: orderReference,
       client_phone: phone,
       client_name: name,
+      plate,
+      brand_model: brandModel,
+      color,
       amount,
       wash_type_id: washTypeId,
       vehicle_type_id: vtypeId,
+      box_id: boxId,
       staff_id: staffId,
       scheduled_at: scheduledAt,
       notes,
+      extras: checkedExtras,
+      discount_percent: (currentClientDiscount > 0 && applyDiscount) ? currentClientDiscount : 0,
       status: 'pending'
     });
 
     if (error) { console.error(error); alert('Помилка створення посилання'); return; }
 
     modal.style.display = 'none';
-    ['l-phone', 'l-name', 'l-notes'].forEach(id => document.getElementById(id).value = '');
+    ['l-phone', 'l-name', 'l-plate', 'l-notes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('l-color').value = '';
     document.getElementById('l-amount').value = '200';
+    document.getElementById('l-amount').dataset.dirty = 'false';
+    document.getElementById('l-client-found').style.display = 'none';
+    document.getElementById('l-discount-info').style.display = 'none';
+    currentClientDiscount = 0;
     await loadLinks();
 
     const payUrl = buildPayUrl(orderReference);
