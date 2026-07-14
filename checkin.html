@@ -43,11 +43,17 @@
       <div class="page-h" id="page-h">Авто приїхало</div>
       <div class="page-sub" id="page-sub">Заповніть дані перед миттям</div>
 
+      <div id="today-quick-list" style="display:none;">
+        <div class="section-label">Записи на сьогодні</div>
+        <div id="today-quick-items"></div>
+      </div>
+
       <form id="checkin-form">
         <div class="form-row">
           <div class="form-group"><label>Номерний знак</label><input type="text" id="plate" placeholder="ТН 1234 АА" required></div>
-          <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="phone" placeholder="+380671112233" required></div>
+          <div class="form-group"><label>Ім'я клієнта</label><input type="text" id="client-name" placeholder="Олена Ковальчук"></div>
         </div>
+        <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="phone" placeholder="+380671112233" required></div>
         <div class="form-group" id="discount-info" style="display:none;background:var(--green-100);border-radius:8px;padding:9px 12px;margin-bottom:6px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--green-600);">
             <input type="checkbox" id="apply-discount" checked style="width:16px;height:16px;">
@@ -241,8 +247,55 @@
     await loadOptions();
     if (existingBookingId) {
       await loadExistingBooking();
+    } else {
+      await loadTodayQuickList();
     }
   });
+
+  // Показує міні-список записів на сьогодні зверху форми (якщо це не режим
+  // редагування конкретного запису) — клік одразу підтягує всі дані цього запису
+  async function loadTodayQuickList() {
+    const box = document.getElementById('today-quick-list');
+    const items = document.getElementById('today-quick-items');
+
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const end = new Date(); end.setHours(23, 59, 59, 999);
+
+    const { data: bookings, error } = await supabase
+      .from('bookings')
+      .select('*, cars(*), clients(*), wash_types(*)')
+      .eq('staff_id', currentStaff.id)
+      .gte('scheduled_at', start.toISOString())
+      .lte('scheduled_at', end.toISOString())
+      .in('status', ['pending', 'confirmed', 'in_progress'])
+      .order('scheduled_at');
+
+    if (error || !bookings || bookings.length === 0) {
+      box.style.display = 'none';
+      return;
+    }
+
+    box.style.display = 'block';
+    items.innerHTML = '';
+    bookings.forEach(b => {
+      const time = new Date(b.scheduled_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+      const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.cars.plate || ''}` : (b.wash_types?.name || 'Без даних авто');
+      const clientLabel = b.clients?.full_name || b.clients?.phone || '';
+      const row = document.createElement('div');
+      row.className = 'job-card';
+      row.style.cssText = 'cursor:pointer;padding:11px 14px;';
+      row.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div><b style="font-size:12.5px;">${time} · ${carLabel}</b><br><span style="font-size:11.5px;color:var(--text-2);">${clientLabel}</span></div>
+          <span style="font-size:11.5px;color:var(--cyan-600);font-weight:600;">Заповнити →</span>
+        </div>
+      `;
+      row.addEventListener('click', () => {
+        window.location.href = 'checkin.html?booking=' + b.id;
+      });
+      items.appendChild(row);
+    });
+  }
 
   async function loadOptions() {
     const [{ data: vt }, { data: wt }, { data: wp }, { data: ex }] = await Promise.all([
@@ -285,6 +338,7 @@
 
     if (booking.clients) {
       document.getElementById('phone').value = booking.clients.phone || '';
+      document.getElementById('client-name').value = booking.clients.full_name || '';
       currentClientDiscount = booking.clients.permanent_discount_percent || 0;
       const infoBox = document.getElementById('discount-info');
       if (currentClientDiscount > 0) {
@@ -434,6 +488,7 @@
     submitBtn.textContent = 'Зберігаємо...';
 
     const plate = document.getElementById('plate').value.trim();
+    const clientName = document.getElementById('client-name').value.trim();
     const phone = document.getElementById('phone').value.trim();
     const brandModel = getBrandModelValue();
     const color = document.getElementById('color').value.trim();
@@ -451,7 +506,7 @@
         bookingId = existingBooking.id;
 
         if (existingBooking.client_id) {
-          await supabase.from('clients').update({ phone }).eq('id', existingBooking.client_id);
+          await supabase.from('clients').update({ phone, full_name: clientName }).eq('id', existingBooking.client_id);
         }
         if (existingBooking.car_id) {
           await supabase.from('cars').update({
@@ -488,9 +543,10 @@
 
         if (existingClient) {
           clientId = existingClient.id;
+          await supabase.from('clients').update({ full_name: clientName }).eq('id', clientId);
         } else {
           const { data: newClient, error: clientErr } = await supabase
-            .from('clients').insert({ phone, location_id: currentStaff.location_id }).select().single();
+            .from('clients').insert({ phone, full_name: clientName, location_id: currentStaff.location_id }).select().single();
           if (clientErr) throw clientErr;
           clientId = newClient.id;
         }
