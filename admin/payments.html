@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mage Wash — Посилання на оплату</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mage Wash Admin">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>Mage Wash</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <img src="icon-192.png" class="brand-mark" style="object-fit:cover;">
+        <div class="brand-text"><b>Mage Wash</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+        <a class="nav-item active" href="payments.html">Посилання на оплату</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Посилання на оплату</h1><div class="sub">Створіть посилання — клієнт відкриє, заповнить дані і сплатить</div></div>
+        <button class="btn btn-primary btn-sm" id="add-link-btn">+ Нове посилання</button>
+      </div>
+      <div class="content" id="page-content">
+
+        <div class="panel" id="wfp-warning" style="display:none;border-color:var(--amber-600);">
+          <div class="panel-body" style="color:var(--amber-600);font-size:13px;">
+            ⚠️ Для цієї мийки ще не вказано реквізити WayForPay. Перейдіть у "Послуги та ціни" → "WayForPay — прийом оплат" і збережіть Merchant Account і Secret Key, інакше посилання на оплату не працюватимуть.
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Створені посилання</h3></div>
+          <div class="panel-body" style="padding:0;">
+            <table id="links-table">
+              <tr><th>Клієнт</th><th>Сума</th><th>Послуга</th><th>Дата запису</th><th>Статус</th><th></th></tr>
+              <tr><td colspan="6" class="empty-state">Завантаження...</td></tr>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА СТВОРЕННЯ ПОСИЛАННЯ -->
+<div id="link-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:380px;max-height:85vh;overflow-y:auto;">
+    <h3 style="margin:0 0 14px;font-size:15px;">Нове посилання на оплату</h3>
+
+    <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="l-phone" placeholder="+380671112233"></div>
+    <div class="form-group"><label>Ім'я клієнта (необов'язково)</label><input type="text" id="l-name"></div>
+    <div class="form-group"><label>Мийник</label><select id="l-staff"><option value="">Не призначено</option></select></div>
+    <div class="form-group"><label>Тип послуги (необов'язково)</label><select id="l-washtype"><option value="">Не вказано</option></select></div>
+    <div class="form-group"><label>Тип авто (необов'язково)</label><select id="l-vtype"><option value="">Не вказано</option></select></div>
+    <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="form-group"><label>Дата запису</label><input type="date" id="l-date"></div>
+      <div class="form-group"><label>Час</label><input type="time" id="l-time"></div>
+    </div>
+    <div class="form-group"><label>Сума до оплати, грн</label><input type="text" id="l-amount" value="200"></div>
+    <div class="form-group"><label>Нотатки (необов'язково)</label><textarea id="l-notes"></textarea></div>
+
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn" style="flex:1;" id="l-cancel">Скасувати</button>
+      <button class="btn btn-primary" style="flex:1;" id="l-save">Створити посилання</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentLocationId = null;
+
+  // Визначаємо "slug" мийки з поточної адреси (наприклад /onewash/admin/payments.html → onewash),
+  // щоб посилання на оплату вело саме на публічну сторінку тієї ж мийки
+  function getLocationSlug() {
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    // очікуємо структуру /<slug>/admin/payments.html
+    if (parts.length >= 2 && parts[1] === 'admin') return parts[0];
+    return null;
+  }
+
+  function buildPayUrl(orderReference) {
+    const slug = getLocationSlug();
+    const prefix = slug ? '/' + slug : '';
+    return `${window.location.origin}${prefix}/pay.html?ref=${orderReference}`;
+  }
+
+  initAdminPage(async (admin, locations, locationId) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+    currentLocationId = locationId;
+
+    const { data: loc } = await supabase
+      .from('locations').select('wayforpay_merchant_account, wayforpay_secret_key')
+      .eq('id', currentLocationId).single();
+    if (!loc?.wayforpay_merchant_account || !loc?.wayforpay_secret_key) {
+      document.getElementById('wfp-warning').style.display = 'block';
+    }
+
+    await loadOptions();
+    await loadLinks();
+  });
+
+  async function loadOptions() {
+    const [{ data: staff }, { data: wt }, { data: vt }] = await Promise.all([
+      supabase.from('staff').select('*').eq('location_id', currentLocationId).eq('is_active', true).order('full_name'),
+      supabase.from('wash_types').select('*').eq('location_id', currentLocationId).order('sort_order'),
+      supabase.from('vehicle_types').select('*').eq('location_id', currentLocationId).order('sort_order')
+    ]);
+    document.getElementById('l-staff').innerHTML = '<option value="">Не призначено</option>' +
+      (staff || []).map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
+    document.getElementById('l-washtype').innerHTML = '<option value="">Не вказано</option>' +
+      (wt || []).map(w => `<option value="${w.id}">${w.name}</option>`).join('');
+    document.getElementById('l-vtype').innerHTML = '<option value="">Не вказано</option>' +
+      (vt || []).map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  }
+
+  function generateOrderRef() {
+    return 'MW-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+  }
+
+  async function loadLinks() {
+    const { data: links, error } = await supabase
+      .from('payment_links')
+      .select('*, wash_types(name)')
+      .eq('location_id', currentLocationId)
+      .order('created_at', { ascending: false });
+
+    const table = document.getElementById('links-table');
+    if (error) { console.error(error); return; }
+    if (!links || links.length === 0) {
+      table.innerHTML = '<tr><th>Клієнт</th><th>Сума</th><th>Послуга</th><th>Дата запису</th><th>Статус</th><th></th></tr><tr><td colspan="6" class="empty-state">Посилань ще немає</td></tr>';
+      return;
+    }
+
+    const statusLabels = { pending: 'Очікує оплати', paid: 'Оплачено ✓', cancelled: 'Скасовано', expired: 'Прострочено' };
+    const statusColors = { pending: 'var(--amber-600)', paid: 'var(--green-600)', cancelled: 'var(--text-3)', expired: 'var(--red-600)' };
+
+    table.innerHTML = '<tr><th>Клієнт</th><th>Сума</th><th>Послуга</th><th>Дата запису</th><th>Статус</th><th></th></tr>';
+    links.forEach(l => {
+      const payUrl = buildPayUrl(l.order_reference);
+      const scheduledLabel = l.scheduled_at
+        ? new Date(l.scheduled_at).toLocaleString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+        : '—';
+
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${l.client_name || '—'}<br><span style="color:var(--text-2);font-size:11.5px;">${l.client_phone}</span></td>
+        <td><b>${Number(l.amount).toLocaleString('uk-UA')} грн</b></td>
+        <td>${l.wash_types?.name || '—'}</td>
+        <td>${scheduledLabel}</td>
+        <td><span style="color:${statusColors[l.status]};font-weight:600;">${statusLabels[l.status] || l.status}</span></td>
+        <td>
+          ${l.status === 'pending' ? `<button class="btn btn-sm copy-link-btn" data-url="${payUrl}">Копіювати</button>
+          <button class="btn btn-sm" style="color:var(--red-600);" data-cancel="${l.id}">Скасувати</button>` : ''}
+        </td>
+      `;
+      table.appendChild(row);
+    });
+
+    table.querySelectorAll('.copy-link-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(btn.dataset.url);
+        btn.textContent = 'Скопійовано ✓';
+        setTimeout(() => btn.textContent = 'Копіювати', 1500);
+      });
+    });
+
+    table.querySelectorAll('[data-cancel]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Скасувати це посилання на оплату?')) return;
+        await supabase.from('payment_links').update({ status: 'cancelled' }).eq('id', btn.dataset.cancel);
+        await loadLinks();
+      });
+    });
+  }
+
+  // ==== СТВОРЕННЯ ПОСИЛАННЯ ====
+  const modal = document.getElementById('link-modal');
+  document.getElementById('add-link-btn').addEventListener('click', () => {
+    document.getElementById('l-date').value = new Date().toISOString().slice(0, 10);
+    modal.style.display = 'flex';
+  });
+  document.getElementById('l-cancel').addEventListener('click', () => modal.style.display = 'none');
+
+  document.getElementById('l-save').addEventListener('click', async () => {
+    const phone = document.getElementById('l-phone').value.trim();
+    const name = document.getElementById('l-name').value.trim();
+    const staffId = document.getElementById('l-staff').value || null;
+    const washTypeId = document.getElementById('l-washtype').value || null;
+    const vtypeId = document.getElementById('l-vtype').value || null;
+    const date = document.getElementById('l-date').value;
+    const time = document.getElementById('l-time').value;
+    const amount = parseFloat(document.getElementById('l-amount').value);
+    const notes = document.getElementById('l-notes').value.trim();
+
+    if (!phone || isNaN(amount) || amount <= 0) {
+      alert('Вкажіть принаймні телефон клієнта і коректну суму');
+      return;
+    }
+
+    let scheduledAt = null;
+    if (date && time) scheduledAt = new Date(`${date}T${time}:00`).toISOString();
+
+    const orderReference = generateOrderRef();
+
+    const { error } = await supabase.from('payment_links').insert({
+      location_id: currentLocationId,
+      order_reference: orderReference,
+      client_phone: phone,
+      client_name: name,
+      amount,
+      wash_type_id: washTypeId,
+      vehicle_type_id: vtypeId,
+      staff_id: staffId,
+      scheduled_at: scheduledAt,
+      notes,
+      status: 'pending'
+    });
+
+    if (error) { console.error(error); alert('Помилка створення посилання'); return; }
+
+    modal.style.display = 'none';
+    ['l-phone', 'l-name', 'l-notes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('l-amount').value = '200';
+    await loadLinks();
+
+    const payUrl = buildPayUrl(orderReference);
+    navigator.clipboard.writeText(payUrl);
+    alert('Посилання створено і скопійовано в буфер обміну:\n' + payUrl);
+  });
+</script>
+</body>
+</html>
