@@ -116,6 +116,27 @@
           </div>
         </div>
 
+        <div class="panel">
+          <div class="panel-head"><h3>WayForPay — прийом оплат</h3></div>
+          <div class="panel-body">
+            <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;">Реквізити вашого власного акаунта WayForPay для цієї мийки. Знайти їх можна в особистому кабінеті WayForPay → Мій магазин → Налаштування.</p>
+            <div class="form-group" style="max-width:340px;">
+              <label>Merchant Account (логін магазину)</label>
+              <input type="text" id="wfp-merchant" placeholder="onewash_ternopil">
+            </div>
+            <div class="form-group" style="max-width:340px;">
+              <label>Secret Key</label>
+              <input type="password" id="wfp-secret" placeholder="••••••••••••••••">
+            </div>
+            <div class="form-group" style="max-width:340px;">
+              <label>Домен сайту (Merchant Domain Name)</label>
+              <input type="text" id="wfp-domain" placeholder="mage-wash.online">
+            </div>
+            <button class="btn btn-primary btn-sm" id="save-wfp">Зберегти реквізити</button>
+            <p id="wfp-status" style="font-size:11.5px;color:var(--text-3);margin-top:8px;"></p>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -138,7 +159,7 @@
   });
 
   async function loadAll() {
-    await Promise.all([loadBoxes(), loadTypes(), loadExtras(), loadLocationSettings(), loadLogo()]);
+    await Promise.all([loadBoxes(), loadTypes(), loadExtras(), loadLocationSettings(), loadLogo(), loadWayForPay()]);
     renderPriceMatrix();
   }
 
@@ -393,6 +414,39 @@
     const { error } = await supabase.from('locations').update({ prepayment_amount: amount }).eq('id', currentLocationId);
     if (error) { console.error(error); alert('Помилка збереження'); return; }
     alert('Збережено');
+  });
+
+  // ==== WAYFORPAY ====
+  async function loadWayForPay() {
+    const { data, error } = await supabase
+      .from('locations')
+      .select('wayforpay_merchant_account, wayforpay_secret_key, wayforpay_domain')
+      .eq('id', currentLocationId).single();
+    if (error) { console.error(error); return; }
+    document.getElementById('wfp-merchant').value = data.wayforpay_merchant_account || '';
+    document.getElementById('wfp-secret').value = data.wayforpay_secret_key || '';
+    document.getElementById('wfp-domain').value = data.wayforpay_domain || 'mage-wash.online';
+
+    const status = document.getElementById('wfp-status');
+    status.textContent = data.wayforpay_merchant_account && data.wayforpay_secret_key
+      ? '✅ Реквізити збережено — можна створювати посилання на оплату'
+      : '⚠️ Реквізити ще не вказано — посилання на оплату не працюватимуть';
+  }
+
+  document.getElementById('save-wfp').addEventListener('click', async () => {
+    const merchant = document.getElementById('wfp-merchant').value.trim();
+    const secret = document.getElementById('wfp-secret').value.trim();
+    const domain = document.getElementById('wfp-domain').value.trim();
+
+    const { error } = await supabase.from('locations').update({
+      wayforpay_merchant_account: merchant,
+      wayforpay_secret_key: secret,
+      wayforpay_domain: domain
+    }).eq('id', currentLocationId);
+
+    if (error) { console.error(error); alert('Помилка збереження'); return; }
+    alert('Реквізити збережено');
+    await loadWayForPay();
   });
 </script>
 </body>
