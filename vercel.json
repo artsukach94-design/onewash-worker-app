@@ -1,0 +1,8 @@
+{
+  "trailingSlash": true,
+  "rewrites": [
+    { "source": "/:slug/admin", "destination": "/admin" },
+    { "source": "/:slug/admin/:path*", "destination": "/admin/:path*" },
+    { "source": "/:slug/:path*", "destination": "/:path*" }
+  ]
+}
