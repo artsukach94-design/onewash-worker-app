@@ -89,6 +89,15 @@
   </div>
 </div>
 
+<!-- МОДАЛКА ІСТОРІЇ МИЙОК -->
+<div id="history-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;overflow-y:auto;padding:30px 0;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:520px;max-height:85vh;overflow-y:auto;">
+    <h3 style="margin:0 0 14px;font-size:15px;" id="hist-client-name">Історія мийок</h3>
+    <div id="hist-list">Завантаження...</div>
+    <button class="btn" style="width:100%;margin-top:14px;" id="hist-close">Закрити</button>
+  </div>
+</div>
+
 <script type="module">
   import { supabase, initAdminPage, wireLoginForm, logout, formatTime } from './app.js';
 
@@ -137,21 +146,27 @@
     table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th>Знижка, %</th><th></th></tr>';
     clients.forEach(c => {
       const stats = statsByClient[c.id] || { done: 0, last: null };
-      const carsLabel = c.cars.length
-        ? c.cars.map(car => `${car.brand_model || 'Авто'} (${car.plate || '—'})`).join(', ')
-        : '—';
       const lastVisit = stats.last
         ? new Date(stats.last).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
         : '—';
+
+      const carsHtml = (c.cars || []).map(car => `
+        <span class="car-chip" data-car-id="${car.id}" style="display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:3px 8px 3px 10px;font-size:11.5px;margin:2px 3px 2px 0;">
+          ${car.brand_model || 'Авто'} (${car.plate || '—'})
+          <span class="car-del" data-car-id="${car.id}" style="cursor:pointer;color:var(--red-600);font-weight:700;">×</span>
+        </span>`).join('');
 
       const row = document.createElement('tr');
       row.innerHTML = `
         <td class="person"><div class="av">${(c.full_name || c.phone || '?')[0].toUpperCase()}</div>
           <input type="text" value="${c.full_name || ''}" placeholder="Без імені" data-id="${c.id}" class="name-input" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;"></td>
-        <td>${c.phone || '—'}</td>
-        <td>${carsLabel}</td>
+        <td><input type="text" value="${c.phone || ''}" placeholder="Телефон" data-id="${c.id}" class="phone-input" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;width:130px;"></td>
+        <td style="max-width:260px;">
+          <div class="cars-wrap" data-client-id="${c.id}">${carsHtml}</div>
+          <span class="add-car-btn" data-client-id="${c.id}" style="font-size:11.5px;color:var(--cyan-600);font-weight:600;cursor:pointer;">+ Авто</span>
+        </td>
         <td>${lastVisit}</td>
-        <td>${stats.done}</td>
+        <td><span class="wash-count-btn" data-client-id="${c.id}" data-client-name="${c.full_name || c.phone}" style="cursor:pointer;color:var(--cyan-600);font-weight:600;text-decoration:underline;">${stats.done}</span></td>
         <td><b>${Number(c.cashback_balance || 0).toLocaleString('uk-UA')}</b></td>
         <td><input type="text" value="${c.permanent_discount_percent || 0}" data-id="${c.id}" class="discount-input" style="width:56px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;text-align:right;"></td>
         <td><button class="btn btn-sm cashback-btn" data-id="${c.id}" data-name="${c.full_name || c.phone}" data-balance="${c.cashback_balance || 0}">Списати</button></td>
@@ -165,6 +180,12 @@
       });
     });
 
+    table.querySelectorAll('.phone-input').forEach(input => {
+      input.addEventListener('blur', async () => {
+        await supabase.from('clients').update({ phone: input.value.trim() }).eq('id', input.dataset.id);
+      });
+    });
+
     table.querySelectorAll('.discount-input').forEach(input => {
       input.addEventListener('blur', async () => {
         const value = parseFloat(input.value);
@@ -175,6 +196,28 @@
 
     table.querySelectorAll('.cashback-btn').forEach(btn => {
       btn.addEventListener('click', () => openCashbackModal(btn.dataset.id, btn.dataset.name, btn.dataset.balance));
+    });
+
+    table.querySelectorAll('.car-del').forEach(el => {
+      el.addEventListener('click', async () => {
+        if (!confirm('Видалити це авто клієнта?')) return;
+        await supabase.from('cars').delete().eq('id', el.dataset.carId);
+        await loadClients();
+      });
+    });
+
+    table.querySelectorAll('.add-car-btn').forEach(el => {
+      el.addEventListener('click', async () => {
+        const plate = prompt('Номерний знак авто:');
+        if (!plate) return;
+        const brandModel = prompt('Марка і модель (необов\'язково):') || '';
+        await supabase.from('cars').insert({ client_id: el.dataset.clientId, plate, brand_model: brandModel });
+        await loadClients();
+      });
+    });
+
+    table.querySelectorAll('.wash-count-btn').forEach(el => {
+      el.addEventListener('click', () => openWashHistory(el.dataset.clientId, el.dataset.clientName));
     });
   }
 
@@ -211,6 +254,59 @@
     cashbackModal.style.display = 'none';
     await loadClients();
   });
+
+  // ==== ІСТОРІЯ МИЙОК З ФОТО ====
+  const historyModal = document.getElementById('history-modal');
+  document.getElementById('hist-close').addEventListener('click', () => historyModal.style.display = 'none');
+
+  async function openWashHistory(clientId, clientName) {
+    document.getElementById('hist-client-name').textContent = 'Історія мийок — ' + clientName;
+    document.getElementById('hist-list').innerHTML = 'Завантаження...';
+    historyModal.style.display = 'flex';
+
+    const { data: bookings, error } = await supabase
+      .from('bookings')
+      .select('*, cars(brand_model, plate), wash_types(name), staff(full_name, photo_url), wash_photos(*)')
+      .eq('client_id', clientId)
+      .eq('status', 'done')
+      .order('scheduled_at', { ascending: false });
+
+    const list = document.getElementById('hist-list');
+    if (error) { console.error(error); list.innerHTML = '<p>Помилка завантаження</p>'; return; }
+    if (!bookings || bookings.length === 0) {
+      list.innerHTML = '<div class="empty-state">Виконаних мийок ще немає</div>';
+      return;
+    }
+
+    const angleLabels = { front: 'перед', back: 'зад', left: 'ліво', right: 'право' };
+
+    list.innerHTML = '';
+    bookings.forEach(b => {
+      const date = new Date(b.scheduled_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
+      const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.cars.plate || ''}` : '';
+      const staffLabel = b.staff?.full_name || 'Не вказано';
+
+      const photosHtml = (b.wash_photos || []).map(p => {
+        const { data: pub } = supabase.storage.from('wash-photos').getPublicUrl(p.storage_path);
+        return `<a href="${pub.publicUrl}" target="_blank" style="display:inline-block;margin:0 6px 6px 0;">
+          <img src="${pub.publicUrl}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);" title="${angleLabels[p.angle] || p.angle}">
+        </a>`;
+      }).join('');
+
+      const card = document.createElement('div');
+      card.className = 'job-card';
+      card.style.marginBottom = '12px';
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <b style="font-size:13px;">${date}</b>
+          <b style="font-size:13.5px;">${Number(b.total_price || 0).toLocaleString('uk-UA')} грн</b>
+        </div>
+        <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">${carLabel} · ${b.wash_types?.name || ''} · мийник: ${staffLabel}</div>
+        ${photosHtml ? `<div>${photosHtml}</div>` : '<div style="font-size:11.5px;color:var(--text-3);">Фото немає</div>'}
+      `;
+      list.appendChild(card);
+    });
+  }
 </script>
 </body>
 </html>
