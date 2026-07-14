@@ -140,7 +140,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+  import { supabase, initAdminPage, wireLoginForm, logout, subscribeToTable } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -177,6 +177,12 @@
 
     await loadOptions();
     await loadLinks();
+
+    // Realtime: коли WayForPay через webhook позначить посилання оплаченим —
+    // статус у таблиці оновиться сам, без ручного оновлення сторінки
+    subscribeToTable('payment-links-' + currentLocationId, 'payment_links', `location_id=eq.${currentLocationId}`, () => {
+      loadLinks();
+    });
   });
 
   async function loadOptions() {
