@@ -76,7 +76,7 @@
 
         <div class="panel">
           <div class="panel-head"><h3>Типи послуг (мийки)</h3><button class="btn btn-sm" id="add-washtype">+ Додати тип послуги</button></div>
-          <div class="panel-body" id="washtype-list" style="display:flex;gap:8px;flex-wrap:wrap;">Завантаження...</div>
+          <div class="panel-body" id="washtype-list">Завантаження...</div>
         </div>
 
         <div class="panel">
@@ -90,7 +90,7 @@
         <div class="panel">
           <div class="panel-head"><h3>Додаткові послуги</h3><button class="btn btn-primary btn-sm" id="add-extra">+ Додати послугу</button></div>
           <div class="panel-body" style="padding:0;">
-            <table id="extras-table"><tr><th>Назва</th><th>Ціна, грн</th><th>Активна</th><th></th></tr></table>
+            <table id="extras-table"><tr><th>Назва</th><th>Ціна, грн</th><th>Тривалість, хв</th><th>Активна</th><th></th></tr></table>
           </div>
         </div>
 
@@ -213,7 +213,42 @@
     washPrices = wp || [];
 
     renderTypeChips('vtype-list', vehicleTypes, 'vehicle_types');
-    renderTypeChips('washtype-list', washTypes, 'wash_types');
+    renderWashTypeList();
+  }
+
+  function renderWashTypeList() {
+    const box = document.getElementById('washtype-list');
+    if (washTypes.length === 0) {
+      box.innerHTML = '<span style="font-size:12.5px;color:var(--text-2);">Ще нічого не додано</span>';
+      return;
+    }
+    box.innerHTML = washTypes.map(w => `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <span style="flex:1;font-size:13px;font-weight:500;">${w.name}</span>
+        <label style="font-size:11.5px;color:var(--text-2);white-space:nowrap;">Тривалість, хв
+          <input type="text" value="${w.duration_minutes ?? 30}" data-id="${w.id}" class="washtype-duration"
+            style="width:56px;margin-left:6px;border:1px solid var(--border);border-radius:6px;padding:5px 7px;font-size:12.5px;text-align:right;">
+        </label>
+        <span class="del-washtype" data-id="${w.id}" data-name="${w.name}" style="cursor:pointer;color:var(--red-600);font-weight:600;">×</span>
+      </div>`).join('');
+
+    box.querySelectorAll('.washtype-duration').forEach(input => {
+      input.addEventListener('blur', async () => {
+        const minutes = parseInt(input.value, 10);
+        if (isNaN(minutes) || minutes <= 0) { alert('Тривалість має бути додатним числом хвилин'); return; }
+        await supabase.from('wash_types').update({ duration_minutes: minutes }).eq('id', input.dataset.id);
+      });
+    });
+
+    box.querySelectorAll('.del-washtype').forEach(el => {
+      el.addEventListener('click', async () => {
+        if (!confirm(`Видалити "${el.dataset.name}"? Якщо для нього вже є ціни або записи — видалення може не спрацювати.`)) return;
+        const { error } = await supabase.from('wash_types').delete().eq('id', el.dataset.id);
+        if (error) { alert('Не вдалося видалити: можливо, тип ще використовується в цінах або записах.'); console.error(error); return; }
+        await loadTypes();
+        renderPriceMatrix();
+      });
+    });
   }
 
   function renderTypeChips(containerId, items, tableName) {
@@ -301,12 +336,13 @@
     if (error) { console.error(error); return; }
 
     const table = document.getElementById('extras-table');
-    table.innerHTML = '<tr><th>Назва</th><th>Ціна, грн</th><th>Активна</th><th></th></tr>';
+    table.innerHTML = '<tr><th>Назва</th><th>Ціна, грн</th><th>Тривалість, хв</th><th>Активна</th><th></th></tr>';
     extras.forEach(e => {
       const row = document.createElement('tr');
       row.innerHTML = `
         <td><input type="text" value="${e.name}" data-field="name" data-id="${e.id}" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;width:100%;"></td>
         <td><input type="text" value="${e.price}" data-field="price" data-id="${e.id}" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;width:90px;"></td>
+        <td><input type="text" value="${e.duration_minutes ?? 0}" data-field="duration_minutes" data-id="${e.id}" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;width:70px;"></td>
         <td><span class="toggle ${e.is_active ? 'on' : ''}" data-id="${e.id}" data-active="${e.is_active}"></span></td>
         <td><span style="color:var(--red-600);cursor:pointer;font-size:12.5px;" data-del="${e.id}">Видалити</span></td>
       `;
@@ -316,8 +352,8 @@
     table.querySelectorAll('input[data-field]').forEach(input => {
       input.addEventListener('blur', async () => {
         const field = input.dataset.field;
-        const value = field === 'price' ? parseFloat(input.value) : input.value.trim();
-        if (field === 'price' && isNaN(value)) return;
+        const value = (field === 'price' || field === 'duration_minutes') ? parseFloat(input.value) : input.value.trim();
+        if ((field === 'price' || field === 'duration_minutes') && isNaN(value)) return;
         await supabase.from('extra_services').update({ [field]: value }).eq('id', input.dataset.id);
       });
     });
@@ -346,8 +382,10 @@
     const priceStr = prompt('Ціна, грн:');
     const price = parseFloat(priceStr);
     if (isNaN(price)) { alert('Некоректна ціна'); return; }
+    const durationStr = prompt('Скільки додаткових хвилин займає ця послуга? (0, якщо не подовжує мийку):', '0');
+    const duration = parseInt(durationStr, 10) || 0;
     const { error } = await supabase.from('extra_services').insert({
-      location_id: currentLocationId, name, price, is_active: true
+      location_id: currentLocationId, name, price, duration_minutes: duration, is_active: true
     });
     if (error) { console.error(error); alert('Помилка додавання'); return; }
     await loadExtras();
