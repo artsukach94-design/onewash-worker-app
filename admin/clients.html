@@ -65,6 +65,9 @@
       <div class="content" id="page-content">
         <div class="panel">
           <div class="panel-head"><h3>Список клієнтів</h3></div>
+          <div class="panel-body" style="padding:14px 18px 0;">
+            <input type="text" id="client-search" placeholder="Пошук за телефоном або номером авто..." style="width:100%;max-width:360px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+          </div>
           <div class="panel-body" style="padding:0;">
             <table id="clients-table">
               <tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th>Знижка, %</th><th></th></tr>
@@ -114,6 +117,9 @@
     await loadClients();
   });
 
+  let allClients = [];
+  let allStats = {};
+
   async function loadClients() {
     const { data: clients, error } = await supabase
       .from('clients')
@@ -138,6 +144,25 @@
       }
     });
 
+    allClients = clients;
+    allStats = statsByClient;
+    renderClientsTable(allClients);
+  }
+
+  document.getElementById('client-search').addEventListener('input', (e) => {
+    const query = e.target.value.trim().toLowerCase().replace(/[\s\-()]/g, '');
+    if (!query) { renderClientsTable(allClients); return; }
+
+    const filtered = allClients.filter(c => {
+      const phoneMatch = (c.phone || '').toLowerCase().replace(/[\s\-()]/g, '').includes(query);
+      const plateMatch = (c.cars || []).some(car => (car.plate || '').toLowerCase().replace(/[\s\-()]/g, '').includes(query));
+      return phoneMatch || plateMatch;
+    });
+    renderClientsTable(filtered);
+  });
+
+  function renderClientsTable(clients) {
+    const statsByClient = allStats;
     const table = document.getElementById('clients-table');
     if (clients.length === 0) {
       table.innerHTML = '<tr><th>Клієнт</th><th>Телефон</th><th>Авто</th><th>Останній візит</th><th>Виконано мийок</th><th>Кешбек, грн</th><th></th></tr><tr><td colspan="7" class="empty-state">Клієнтів ще немає</td></tr>';
