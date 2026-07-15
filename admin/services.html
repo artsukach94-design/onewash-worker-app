@@ -458,16 +458,16 @@
   // ==== WAYFORPAY ====
   async function loadWayForPay() {
     const { data, error } = await supabase
-      .from('locations')
+      .from('location_payment_credentials')
       .select('wayforpay_merchant_account, wayforpay_secret_key, wayforpay_domain')
-      .eq('id', currentLocationId).single();
+      .eq('location_id', currentLocationId).maybeSingle();
     if (error) { console.error(error); return; }
-    document.getElementById('wfp-merchant').value = data.wayforpay_merchant_account || '';
-    document.getElementById('wfp-secret').value = data.wayforpay_secret_key || '';
-    document.getElementById('wfp-domain').value = data.wayforpay_domain || 'mage-wash.online';
+    document.getElementById('wfp-merchant').value = data?.wayforpay_merchant_account || '';
+    document.getElementById('wfp-secret').value = data?.wayforpay_secret_key || '';
+    document.getElementById('wfp-domain').value = data?.wayforpay_domain || 'mage-wash.online';
 
     const status = document.getElementById('wfp-status');
-    status.textContent = data.wayforpay_merchant_account && data.wayforpay_secret_key
+    status.textContent = data?.wayforpay_merchant_account && data?.wayforpay_secret_key
       ? '✅ Реквізити збережено — можна створювати посилання на оплату'
       : '⚠️ Реквізити ще не вказано — посилання на оплату не працюватимуть';
   }
@@ -477,11 +477,12 @@
     const secret = document.getElementById('wfp-secret').value.trim();
     const domain = document.getElementById('wfp-domain').value.trim();
 
-    const { error } = await supabase.from('locations').update({
+    const { error } = await supabase.from('location_payment_credentials').upsert({
+      location_id: currentLocationId,
       wayforpay_merchant_account: merchant,
       wayforpay_secret_key: secret,
       wayforpay_domain: domain
-    }).eq('id', currentLocationId);
+    }, { onConflict: 'location_id' });
 
     if (error) { console.error(error); alert('Помилка збереження'); return; }
     alert('Реквізити збережено');
