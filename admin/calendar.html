@@ -113,14 +113,21 @@
           <option value="3">3 повні дні</option>
         </select>
       </div>
-      <div id="m-duration-custom" class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="form-group"><label>Початок</label><input type="date" id="m-start-date"></div>
+      <div id="m-duration-custom" style="display:block;">
+        <div class="form-group">
+          <label>Дата початку</label>
+          <div id="m-chem-start-strip" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+        </div>
         <div class="form-group"><label>Час початку</label><input type="time" id="m-start-time"></div>
-        <div class="form-group"><label>Кінець</label><input type="date" id="m-end-date"></div>
+        <div class="form-group">
+          <label>Дата кінця</label>
+          <div id="m-chem-end-strip" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+        </div>
         <div class="form-group"><label>Час кінця</label><input type="time" id="m-end-time"></div>
       </div>
       <div id="m-duration-fullday" class="form-group" style="display:none;">
-        <label>Дата початку</label><input type="date" id="m-fullday-start">
+        <label>Дата початку</label>
+        <div id="m-chem-fullday-strip" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
       </div>
     </div>
 
@@ -174,6 +181,9 @@
   let modalDays = [];
   let modalSelectedDay = null;
   let modalSelectedSlotISO = null;
+  let chemStartDate = new Date();
+  let chemEndDate = new Date();
+  let chemFulldayStartDate = new Date();
   let currentClientDiscount = 0;
 
   // Популярні марки та моделі авто — з опцією "Інша", якщо потрібної немає в списку
@@ -302,10 +312,33 @@
       : '<p style="font-size:12px;color:var(--text-2);padding:10px 0;">Додаткові послуги не налаштовані</p>';
 
     // за замовчуванням — сьогоднішній обраний день (для хімчистки лишаємо звичайні поля дат)
-    const defaultDate = selectedDate.toISOString().slice(0, 10);
-    document.getElementById('m-start-date').value = defaultDate;
-    document.getElementById('m-end-date').value = defaultDate;
-    document.getElementById('m-fullday-start').value = defaultDate;
+    chemStartDate = new Date();
+    chemEndDate = new Date();
+    chemFulldayStartDate = new Date();
+
+    function renderSimpleDayStrip(containerId, selectedDateRef, onSelect) {
+      const strip = document.getElementById(containerId);
+      strip.innerHTML = '';
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      for (let i = 0; i < 21; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() + i);
+        const chip = document.createElement('div');
+        const isSel = d.toDateString() === selectedDateRef().toDateString();
+        chip.className = 'm-day-chip' + (isSel ? ' sel' : '');
+        chip.innerHTML = `${d.toLocaleDateString('uk-UA', { weekday: 'short' }).replace('.', '')}<b>${d.getDate()}</b>`;
+        chip.addEventListener('click', () => {
+          onSelect(d);
+          strip.querySelectorAll('.m-day-chip').forEach(c => c.classList.remove('sel'));
+          chip.classList.add('sel');
+        });
+        strip.appendChild(chip);
+      }
+    }
+
+    renderSimpleDayStrip('m-chem-start-strip', () => chemStartDate, (d) => { chemStartDate = d; });
+    renderSimpleDayStrip('m-chem-end-strip', () => chemEndDate, (d) => { chemEndDate = d; });
+    renderSimpleDayStrip('m-chem-fullday-strip', () => chemFulldayStartDate, (d) => { chemFulldayStartDate = d; });
 
     document.getElementById('m-washtype').addEventListener('change', () => { updateDurationMode(); refreshSlotGrid(); });
     document.getElementById('m-vtype').addEventListener('change', refreshSlotGrid);
@@ -611,20 +644,22 @@
     if (isChemical) {
       const duration = document.getElementById('m-duration').value;
       if (duration === 'custom') {
-        const startDate = document.getElementById('m-start-date').value;
         const startTime = document.getElementById('m-start-time').value;
-        const endDate = document.getElementById('m-end-date').value;
         const endTime = document.getElementById('m-end-time').value;
-        if (!startDate || !startTime || !endDate || !endTime) {
-          alert('Заповніть дату і час початку та кінця'); return;
+        if (!startTime || !endTime) {
+          alert('Заповніть час початку та кінця'); return;
         }
-        scheduledAt = new Date(`${startDate}T${startTime}:00`);
-        scheduledEnd = new Date(`${endDate}T${endTime}:00`);
+        scheduledAt = new Date(chemStartDate);
+        const [sh, sm] = startTime.split(':').map(Number);
+        scheduledAt.setHours(sh, sm, 0, 0);
+        scheduledEnd = new Date(chemEndDate);
+        const [eh, em] = endTime.split(':').map(Number);
+        scheduledEnd.setHours(eh, em, 0, 0);
       } else {
-        const startDate = document.getElementById('m-fullday-start').value;
-        if (!startDate) { alert('Оберіть дату початку'); return; }
-        scheduledAt = new Date(`${startDate}T00:00:00`);
-        scheduledEnd = new Date(`${startDate}T00:00:00`);
+        scheduledAt = new Date(chemFulldayStartDate);
+        scheduledAt.setHours(0, 0, 0, 0);
+        scheduledEnd = new Date(chemFulldayStartDate);
+        scheduledEnd.setHours(0, 0, 0, 0);
         scheduledEnd.setDate(scheduledEnd.getDate() + parseInt(duration, 10));
         scheduledEnd.setSeconds(scheduledEnd.getSeconds() - 1);
       }
