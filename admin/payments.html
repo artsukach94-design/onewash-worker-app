@@ -168,10 +168,10 @@
     document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
     currentLocationId = locationId;
 
-    const { data: loc } = await supabase
-      .from('locations').select('wayforpay_merchant_account, wayforpay_secret_key')
-      .eq('id', currentLocationId).single();
-    if (!loc?.wayforpay_merchant_account || !loc?.wayforpay_secret_key) {
+    const { data: creds } = await supabase
+      .from('location_payment_credentials').select('wayforpay_merchant_account, wayforpay_secret_key')
+      .eq('location_id', currentLocationId).maybeSingle();
+    if (!creds?.wayforpay_merchant_account || !creds?.wayforpay_secret_key) {
       document.getElementById('wfp-warning').style.display = 'block';
     }
 
