@@ -90,11 +90,15 @@
     <div class="form-group"><label>Бокс</label><select id="m-box"></select></div>
     <div class="form-group"><label>Тип послуги</label><select id="m-washtype"></select></div>
 
-    <!-- ЗВИЧАЙНИЙ ЗАПИС: дата + час -->
+    <!-- ЗВИЧАЙНИЙ ЗАПИС: живий календар днів і вільних/зайнятих слотів -->
     <div id="m-normal-time">
-      <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="form-group"><label>Дата</label><input type="date" id="m-date"></div>
-        <div class="form-group"><label>Час</label><input type="time" id="m-time"></div>
+      <div class="form-group">
+        <label>Дата</label>
+        <div id="m-day-strip" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+      </div>
+      <div class="form-group">
+        <label>Час <span style="font-weight:400;color:var(--text-3);" id="m-slot-hint"></span></label>
+        <div id="m-slot-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;max-height:180px;overflow-y:auto;"></div>
       </div>
     </div>
 
@@ -166,6 +170,10 @@
   let currentLocationId = null;
   let selectedDate = new Date(); selectedDate.setHours(0, 0, 0, 0);
   let staffList = [], vehicleTypes = [], washTypes = [], boxList = [], extraServices = [], washPrices = [];
+  let modalWorkingHours = {};
+  let modalDays = [];
+  let modalSelectedDay = null;
+  let modalSelectedSlotISO = null;
   let currentClientDiscount = 0;
 
   // Популярні марки та моделі авто — з опцією "Інша", якщо потрібної немає в списку
@@ -293,15 +301,19 @@
           </label>`).join('')
       : '<p style="font-size:12px;color:var(--text-2);padding:10px 0;">Додаткові послуги не налаштовані</p>';
 
-    // за замовчуванням — сьогоднішній обраний день і поточний час +1 година
+    // за замовчуванням — сьогоднішній обраний день (для хімчистки лишаємо звичайні поля дат)
     const defaultDate = selectedDate.toISOString().slice(0, 10);
-    document.getElementById('m-date').value = defaultDate;
     document.getElementById('m-start-date').value = defaultDate;
     document.getElementById('m-end-date').value = defaultDate;
     document.getElementById('m-fullday-start').value = defaultDate;
 
-    document.getElementById('m-washtype').addEventListener('change', updateDurationMode);
+    document.getElementById('m-washtype').addEventListener('change', () => { updateDurationMode(); refreshSlotGrid(); });
+    document.getElementById('m-vtype').addEventListener('change', refreshSlotGrid);
+    document.getElementById('m-box').addEventListener('change', refreshSlotGrid);
     updateDurationMode();
+
+    await loadWorkingHoursForModal();
+    renderModalDayStrip();
 
     document.getElementById('m-duration').addEventListener('change', () => {
       const val = document.getElementById('m-duration').value;
@@ -382,6 +394,124 @@
     document.getElementById('m-chemical-time').style.display = isChemical ? 'block' : 'none';
   }
 
+  // ==== ЖИВИЙ КАЛЕНДАР ДНІВ І СЛОТІВ У МОДАЛЦІ РУЧНОГО БРОНЮВАННЯ ====
+  async function loadWorkingHoursForModal() {
+    const { data } = await supabase
+      .from('location_working_hours').select('weekday, is_open, open_time, close_time')
+      .eq('location_id', currentLocationId);
+    modalWorkingHours = {};
+    (data || []).forEach(w => { modalWorkingHours[w.weekday] = w; });
+  }
+
+  function toDbWeekday(date) { return (date.getDay() + 6) % 7; }
+  function parseTimeToMinutes(t) { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0); }
+
+  function getModalDayHours(date) {
+    const wh = modalWorkingHours[toDbWeekday(date)];
+    if (!wh) return { is_open: true, open_time: '09:00', close_time: '20:00' };
+    return wh;
+  }
+
+  function renderModalDayStrip() {
+    const strip = document.getElementById('m-day-strip');
+    strip.innerHTML = '';
+    modalDays = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      modalDays.push(d);
+      const hours = getModalDayHours(d);
+      const closed = !hours.is_open;
+
+      const chip = document.createElement('div');
+      chip.className = 'm-day-chip' + (i === 0 ? ' sel' : '') + (closed ? ' closed' : '');
+      chip.innerHTML = `${d.toLocaleDateString('uk-UA', { weekday: 'short' }).replace('.', '')}<b>${d.getDate()}</b>`;
+      chip.addEventListener('click', () => {
+        if (closed) return;
+        strip.querySelectorAll('.m-day-chip').forEach(c => c.classList.remove('sel'));
+        chip.classList.add('sel');
+        modalSelectedDay = d;
+        refreshSlotGrid();
+      });
+      strip.appendChild(chip);
+    }
+    modalSelectedDay = modalDays[0];
+    refreshSlotGrid();
+  }
+
+  async function refreshSlotGrid() {
+    const grid = document.getElementById('m-slot-grid');
+    const hint = document.getElementById('m-slot-hint');
+    if (!modalSelectedDay) return;
+
+    const hours = getModalDayHours(modalSelectedDay);
+    if (!hours.is_open) {
+      grid.innerHTML = '';
+      hint.textContent = '— мийка в цей день не працює';
+      return;
+    }
+
+    const washTypeId = document.getElementById('m-washtype').value;
+    const washType = washTypes.find(w => w.id === washTypeId);
+    const durationMinutes = washType?.duration_minutes ?? 30;
+    const boxId = document.getElementById('m-box').value;
+
+    const start = new Date(modalSelectedDay); start.setHours(0, 0, 0, 0);
+    const end = new Date(modalSelectedDay); end.setHours(23, 59, 59, 999);
+
+    const { data: dayBookings } = await supabase
+      .from('bookings')
+      .select('box_id, scheduled_at, scheduled_end, wash_type_id')
+      .eq('location_id', currentLocationId)
+      .gte('scheduled_at', start.toISOString())
+      .lte('scheduled_at', end.toISOString())
+      .not('status', 'in', '(cancelled,no_show)');
+
+    function isBusy(slotStart) {
+      const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60000);
+      return (dayBookings || []).some(b => {
+        if (boxId && b.box_id && b.box_id !== boxId) return false;
+        const bStart = new Date(b.scheduled_at);
+        const bWashType = washTypes.find(w => w.id === b.wash_type_id);
+        const bEnd = b.scheduled_end ? new Date(b.scheduled_end) : new Date(bStart.getTime() + (bWashType?.duration_minutes ?? 30) * 60000);
+        return slotStart < bEnd && slotEnd > bStart;
+      });
+    }
+
+    const startMinutes = parseTimeToMinutes(hours.open_time);
+    const endMinutes = parseTimeToMinutes(hours.close_time);
+    const now = new Date();
+
+    grid.innerHTML = '';
+    hint.textContent = `(тривалість: ${durationMinutes} хв)`;
+    modalSelectedSlotISO = null;
+
+    for (let mins = startMinutes; mins < endMinutes; mins += 30) {
+      if (mins + durationMinutes > endMinutes) continue;
+      const slotDate = new Date(modalSelectedDay); slotDate.setHours(0, 0, 0, 0); slotDate.setMinutes(mins);
+      const isPast = slotDate < now;
+      const busy = isPast || isBusy(slotDate);
+
+      const cell = document.createElement('div');
+      cell.className = 'm-slot' + (busy ? ' busy' : '');
+      cell.textContent = slotDate.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+      if (!busy) {
+        cell.addEventListener('click', () => {
+          grid.querySelectorAll('.m-slot').forEach(c => c.classList.remove('sel'));
+          cell.classList.add('sel');
+          modalSelectedSlotISO = slotDate.toISOString();
+        });
+      }
+      grid.appendChild(cell);
+    }
+
+    if (!grid.children.length) {
+      grid.innerHTML = '<span style="grid-column:span 4;font-size:12px;color:var(--text-2);">Вільних слотів на цей день немає</span>';
+    }
+  }
+
   async function loadDay() {
     document.getElementById('day-label').textContent =
       selectedDate.toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -451,7 +581,10 @@
 
   // ==== РУЧНЕ БРОНЮВАННЯ ====
   const modal = document.getElementById('booking-modal');
-  document.getElementById('add-booking-btn').addEventListener('click', () => modal.style.display = 'flex');
+  document.getElementById('add-booking-btn').addEventListener('click', () => {
+    modal.style.display = 'flex';
+    renderModalDayStrip();
+  });
   document.getElementById('m-cancel').addEventListener('click', () => modal.style.display = 'none');
 
   document.getElementById('m-save').addEventListener('click', async () => {
@@ -496,10 +629,8 @@
         scheduledEnd.setSeconds(scheduledEnd.getSeconds() - 1);
       }
     } else {
-      const date = document.getElementById('m-date').value;
-      const time = document.getElementById('m-time').value;
-      if (!date || !time) { alert('Оберіть дату і час'); return; }
-      scheduledAt = new Date(`${date}T${time}:00`);
+      if (!modalSelectedSlotISO) { alert('Оберіть вільний час у календарі'); return; }
+      scheduledAt = new Date(modalSelectedSlotISO);
     }
 
     try {
@@ -560,6 +691,7 @@
       document.getElementById('m-total-price').dataset.dirty = 'false';
       document.getElementById('m-discount-info').style.display = 'none';
       currentClientDiscount = 0;
+      modalSelectedSlotISO = null;
       await loadDay();
 
     } catch (err) {
