@@ -106,3 +106,14 @@ tr:last-child td{border-bottom:none;}
 .toggle.on::after{left:19px;}
 .role-badge{font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;background:#EEF2F6;color:var(--text-2);}
 .empty-state{font-size:13px;color:var(--text-2);text-align:center;padding:30px 20px;}
+
+/* ЖИВИЙ КАЛЕНДАР У МОДАЛЦІ БРОНЮВАННЯ */
+.m-day-chip{flex-shrink:0;width:50px;text-align:center;padding:8px 0;border-radius:10px;background:var(--card);border:1.5px solid var(--border);font-size:11px;color:var(--text-2);cursor:pointer;}
+.m-day-chip b{display:block;font-size:14px;color:var(--text-1);font-weight:700;}
+.m-day-chip.sel{background:var(--navy-950);border-color:var(--navy-950);}
+.m-day-chip.sel, .m-day-chip.sel b{color:#fff;}
+.m-day-chip.closed{background:#F3F4F6;opacity:.6;cursor:not-allowed;}
+.m-day-chip.closed b{text-decoration:line-through;}
+.m-slot{text-align:center;padding:9px 0;border-radius:9px;border:1.5px solid var(--border);font-size:12px;font-weight:600;cursor:pointer;background:var(--card);}
+.m-slot.sel{background:var(--cyan-500);border-color:var(--cyan-500);color:#04202F;}
+.m-slot.busy{background:#F3F4F6;color:var(--text-3);text-decoration:line-through;cursor:not-allowed;}
