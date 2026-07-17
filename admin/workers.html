@@ -68,8 +68,8 @@
           <div class="panel-head"><h3>Список співробітників</h3><button class="btn btn-primary btn-sm" id="invite-btn">+ Запросити мийника</button></div>
           <div class="panel-body" style="padding:0;">
             <table id="workers-table">
-              <tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Графік</th><th>Доступ</th></tr>
-              <tr><td colspan="5" class="empty-state">Завантаження...</td></tr>
+              <tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Рейтинг</th><th>Графік</th><th>Доступ</th></tr>
+              <tr><td colspan="6" class="empty-state">Завантаження...</td></tr>
             </table>
           </div>
         </div>
@@ -150,18 +150,36 @@
     if (error) { console.error(error); return; }
     workersCache = workers;
 
+    const staffIds = workers.map(w => w.id);
+    const { data: reviews } = await supabase
+      .from('reviews')
+      .select('staff_id, rating')
+      .in('staff_id', staffIds.length ? staffIds : ['00000000-0000-0000-0000-000000000000']);
+
+    const ratingByStaff = {};
+    (reviews || []).forEach(r => {
+      if (!ratingByStaff[r.staff_id]) ratingByStaff[r.staff_id] = { sum: 0, count: 0 };
+      ratingByStaff[r.staff_id].sum += r.rating;
+      ratingByStaff[r.staff_id].count += 1;
+    });
+
     const table = document.getElementById('workers-table');
     if (workers.length === 0) {
-      table.innerHTML = '<tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Графік</th><th>Доступ</th></tr><tr><td colspan="5" class="empty-state">Мийників ще немає</td></tr>';
+      table.innerHTML = '<tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Рейтинг</th><th>Графік</th><th>Доступ</th></tr><tr><td colspan="6" class="empty-state">Мийників ще немає</td></tr>';
       return;
     }
 
-    table.innerHTML = '<tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Графік</th><th>Доступ</th></tr>';
+    table.innerHTML = '<tr><th>Працівник</th><th>Телефон</th><th>Роль</th><th>Рейтинг</th><th>Графік</th><th>Доступ</th></tr>';
     workers.forEach(w => {
       const initials = w.full_name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
       const avatarHtml = w.photo_url
         ? `<img src="${w.photo_url}" class="av" style="object-fit:cover;">`
         : `<div class="av">${initials}</div>`;
+
+      const ratingData = ratingByStaff[w.id];
+      const ratingHtml = ratingData
+        ? `★ ${(ratingData.sum / ratingData.count).toFixed(1)} <span style="color:var(--text-3);font-weight:400;">(${ratingData.count})</span>`
+        : `<span style="color:var(--text-3);">Ще немає оцінок</span>`;
 
       const row = document.createElement('tr');
       row.innerHTML = `
@@ -173,6 +191,7 @@
           ${w.full_name}
         </td>
         <td>${w.phone || '—'}</td>
+        <td style="color:#E8A63C;font-weight:700;">${ratingHtml}</td>
         <td><span class="role-badge">${w.role === 'senior_washer' ? 'Старший мийник' : 'Мийник'}</span></td>
         <td><button class="btn btn-sm schedule-btn" data-id="${w.id}" data-name="${w.full_name}">Відкрити календар</button></td>
         <td><span class="toggle ${w.is_active ? 'on' : ''}" data-id="${w.id}" data-active="${w.is_active}"></span></td>
