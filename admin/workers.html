@@ -191,8 +191,8 @@
           ${w.full_name}
         </td>
         <td>${w.phone || '—'}</td>
-        <td style="color:#E8A63C;font-weight:700;">${ratingHtml}</td>
         <td><span class="role-badge">${w.role === 'senior_washer' ? 'Старший мийник' : 'Мийник'}</span></td>
+        <td style="color:#E8A63C;font-weight:700;">${ratingHtml}</td>
         <td><button class="btn btn-sm schedule-btn" data-id="${w.id}" data-name="${w.full_name}">Відкрити календар</button></td>
         <td><span class="toggle ${w.is_active ? 'on' : ''}" data-id="${w.id}" data-active="${w.is_active}"></span></td>
       `;
