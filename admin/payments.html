@@ -126,9 +126,13 @@
       </div>
     </div>
 
-    <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-      <div class="form-group"><label>Дата запису</label><input type="date" id="l-date"></div>
-      <div class="form-group"><label>Час</label><input type="time" id="l-time"></div>
+    <div class="form-group">
+      <label>Дата запису</label>
+      <div id="l-day-strip" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+    </div>
+    <div class="form-group">
+      <label>Час <span style="font-weight:400;color:var(--text-3);" id="l-slot-hint"></span></label>
+      <div id="l-slot-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;max-height:180px;overflow-y:auto;"></div>
     </div>
     <div class="form-group"><label>Нотатки (необов'язково)</label><textarea id="l-notes"></textarea></div>
 
@@ -147,6 +151,9 @@
 
   let currentLocationId = null;
   let staffList = [], washTypes = [], vehicleTypes = [], boxList = [], extraServices = [], washPrices = [];
+  let linkWorkingHours = {};
+  let linkSelectedDay = null;
+  let linkSelectedSlotISO = null;
 
   // Визначаємо "slug" мийки з поточної адреси (наприклад /onewash/admin/payments.html → onewash),
   // щоб посилання на оплату вело саме на публічну сторінку тієї ж мийки
@@ -222,8 +229,9 @@
       : '<p style="font-size:12px;color:var(--text-2);padding:10px 0;">Додаткові послуги не налаштовані</p>';
 
     extrasBox.addEventListener('change', recomputeAmount);
-    document.getElementById('l-washtype').addEventListener('change', recomputeAmount);
+    document.getElementById('l-washtype').addEventListener('change', () => { recomputeAmount(); refreshLinkSlotGrid(); });
     document.getElementById('l-vtype').addEventListener('change', recomputeAmount);
+    document.getElementById('l-box').addEventListener('change', refreshLinkSlotGrid);
 
     const amountInput = document.getElementById('l-amount');
     amountInput.dataset.dirty = 'false';
@@ -232,6 +240,125 @@
       amountInput.dataset.dirty = 'false';
       recomputeAmount();
     });
+
+    await loadLinkWorkingHours();
+    renderLinkDayStrip();
+  }
+
+  // ==== ЖИВИЙ КАЛЕНДАР ДНІВ І СЛОТІВ ====
+  async function loadLinkWorkingHours() {
+    const { data } = await supabase
+      .from('location_working_hours').select('weekday, is_open, open_time, close_time')
+      .eq('location_id', currentLocationId);
+    linkWorkingHours = {};
+    (data || []).forEach(w => { linkWorkingHours[w.weekday] = w; });
+  }
+
+  function linkToDbWeekday(date) { return (date.getDay() + 6) % 7; }
+  function linkParseTimeToMinutes(t) { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0); }
+
+  function getLinkDayHours(date) {
+    const wh = linkWorkingHours[linkToDbWeekday(date)];
+    if (!wh) return { is_open: true, open_time: '09:00', close_time: '20:00' };
+    return wh;
+  }
+
+  function renderLinkDayStrip() {
+    const strip = document.getElementById('l-day-strip');
+    strip.innerHTML = '';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      const hours = getLinkDayHours(d);
+      const closed = !hours.is_open;
+
+      const chip = document.createElement('div');
+      chip.className = 'm-day-chip' + (i === 0 ? ' sel' : '') + (closed ? ' closed' : '');
+      chip.innerHTML = `${d.toLocaleDateString('uk-UA', { weekday: 'short' }).replace('.', '')}<b>${d.getDate()}</b>`;
+      chip.addEventListener('click', () => {
+        if (closed) return;
+        strip.querySelectorAll('.m-day-chip').forEach(c => c.classList.remove('sel'));
+        chip.classList.add('sel');
+        linkSelectedDay = d;
+        refreshLinkSlotGrid();
+      });
+      strip.appendChild(chip);
+    }
+    linkSelectedDay = today;
+    refreshLinkSlotGrid();
+  }
+
+  async function refreshLinkSlotGrid() {
+    const grid = document.getElementById('l-slot-grid');
+    const hint = document.getElementById('l-slot-hint');
+    if (!linkSelectedDay) return;
+
+    const hours = getLinkDayHours(linkSelectedDay);
+    if (!hours.is_open) {
+      grid.innerHTML = '';
+      hint.textContent = '— мийка в цей день не працює';
+      return;
+    }
+
+    const washTypeId = document.getElementById('l-washtype').value;
+    const washType = washTypes.find(w => w.id === washTypeId);
+    const durationMinutes = washType?.duration_minutes ?? 30;
+    const boxId = document.getElementById('l-box').value;
+
+    const start = new Date(linkSelectedDay); start.setHours(0, 0, 0, 0);
+    const end = new Date(linkSelectedDay); end.setHours(23, 59, 59, 999);
+
+    const { data: dayBookings } = await supabase
+      .from('bookings')
+      .select('box_id, scheduled_at, scheduled_end, wash_type_id')
+      .eq('location_id', currentLocationId)
+      .gte('scheduled_at', start.toISOString())
+      .lte('scheduled_at', end.toISOString())
+      .not('status', 'in', '(cancelled,no_show)');
+
+    function isBusy(slotStart) {
+      const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60000);
+      return (dayBookings || []).some(b => {
+        if (boxId && b.box_id && b.box_id !== boxId) return false;
+        const bStart = new Date(b.scheduled_at);
+        const bWashType = washTypes.find(w => w.id === b.wash_type_id);
+        const bEnd = b.scheduled_end ? new Date(b.scheduled_end) : new Date(bStart.getTime() + (bWashType?.duration_minutes ?? 30) * 60000);
+        return slotStart < bEnd && slotEnd > bStart;
+      });
+    }
+
+    const startMinutes = linkParseTimeToMinutes(hours.open_time);
+    const endMinutes = linkParseTimeToMinutes(hours.close_time);
+    const now = new Date();
+
+    grid.innerHTML = '';
+    hint.textContent = `(тривалість: ${durationMinutes} хв)`;
+    linkSelectedSlotISO = null;
+
+    for (let mins = startMinutes; mins < endMinutes; mins += 30) {
+      if (mins + durationMinutes > endMinutes) continue;
+      const slotDate = new Date(linkSelectedDay); slotDate.setHours(0, 0, 0, 0); slotDate.setMinutes(mins);
+      const isPast = slotDate < now;
+      const busy = isPast || isBusy(slotDate);
+
+      const cell = document.createElement('div');
+      cell.className = 'm-slot' + (busy ? ' busy' : '');
+      cell.textContent = slotDate.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+      if (!busy) {
+        cell.addEventListener('click', () => {
+          grid.querySelectorAll('.m-slot').forEach(c => c.classList.remove('sel'));
+          cell.classList.add('sel');
+          linkSelectedSlotISO = slotDate.toISOString();
+        });
+      }
+      grid.appendChild(cell);
+    }
+
+    if (!grid.children.length) {
+      grid.innerHTML = '<span style="grid-column:span 4;font-size:12px;color:var(--text-2);">Вільних слотів на цей день немає</span>';
+    }
   }
 
   // Популярні марки та моделі авто — з опцією "Інша"
@@ -433,8 +560,8 @@
   // ==== СТВОРЕННЯ ПОСИЛАННЯ ====
   const modal = document.getElementById('link-modal');
   document.getElementById('add-link-btn').addEventListener('click', () => {
-    document.getElementById('l-date').value = new Date().toISOString().slice(0, 10);
     modal.style.display = 'flex';
+    renderLinkDayStrip();
   });
   document.getElementById('l-cancel').addEventListener('click', () => modal.style.display = 'none');
 
@@ -448,19 +575,21 @@
     const color = document.getElementById('l-color').value.trim();
     const vtypeId = document.getElementById('l-vtype').value || null;
     const washTypeId = document.getElementById('l-washtype').value || null;
-    const date = document.getElementById('l-date').value;
-    const time = document.getElementById('l-time').value;
     const amount = parseFloat(document.getElementById('l-amount').value);
     const notes = document.getElementById('l-notes').value.trim();
     const applyDiscount = document.getElementById('l-apply-discount').checked;
+
+    if (!linkSelectedSlotISO) {
+      alert('Оберіть вільний час у календарі');
+      return;
+    }
 
     if (!phone || isNaN(amount) || amount <= 0) {
       alert('Вкажіть принаймні телефон клієнта і коректну суму');
       return;
     }
 
-    let scheduledAt = null;
-    if (date && time) scheduledAt = new Date(`${date}T${time}:00`).toISOString();
+    const scheduledAt = linkSelectedSlotISO;
 
     const checkedExtras = [...document.querySelectorAll('#l-extras-box input:checked')].map(cb => ({
       extra_service_id: cb.dataset.id, price: Number(cb.dataset.price)
@@ -498,6 +627,7 @@
     document.getElementById('l-client-found').style.display = 'none';
     document.getElementById('l-discount-info').style.display = 'none';
     currentClientDiscount = 0;
+    linkSelectedSlotISO = null;
     await loadLinks();
 
     const payUrl = buildPayUrl(orderReference);
