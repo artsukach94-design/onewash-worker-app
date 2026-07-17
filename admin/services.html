@@ -107,6 +107,11 @@
         </div>
 
         <div class="panel">
+          <div class="panel-head"><h3>Графік роботи мийки</h3></div>
+          <div class="panel-body" id="working-hours-body">Завантаження...</div>
+        </div>
+
+        <div class="panel">
           <div class="panel-head"><h3>Передоплата</h3></div>
           <div class="panel-body">
             <div class="form-group" style="max-width:220px;">
@@ -160,10 +165,71 @@
   });
 
   async function loadAll() {
-    await Promise.all([loadBoxes(), loadTypes(), loadExtras(), loadLocationSettings(), loadLogo(), loadWayForPay()]);
+    await Promise.all([loadBoxes(), loadTypes(), loadExtras(), loadLocationSettings(), loadLogo(), loadWayForPay(), loadWorkingHours()]);
     renderPriceMatrix();
   }
 
+  // ==== ГРАФІК РОБОТИ МИЙКИ ====
+  const WEEKDAY_NAMES = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
+
+  async function loadWorkingHours() {
+    const { data, error } = await supabase
+      .from('location_working_hours')
+      .select('*')
+      .eq('location_id', currentLocationId)
+      .order('weekday');
+
+    const box = document.getElementById('working-hours-body');
+    if (error) { console.error(error); box.innerHTML = '<p>Помилка завантаження</p>'; return; }
+
+    const byWeekday = {};
+    (data || []).forEach(d => { byWeekday[d.weekday] = d; });
+
+    box.innerHTML = '';
+    for (let i = 0; i < 7; i++) {
+      const d = byWeekday[i] || { is_open: true, open_time: '09:00', close_time: '20:00' };
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--border);';
+      row.innerHTML = `
+        <span style="width:110px;font-size:13px;font-weight:500;">${WEEKDAY_NAMES[i]}</span>
+        <span class="toggle ${d.is_open ? 'on' : ''}" data-weekday="${i}" data-open="${d.is_open}" style="flex-shrink:0;"></span>
+        <span style="font-size:12px;color:var(--text-2);width:56px;">${d.is_open ? 'Робочий' : 'Вихідний'}</span>
+        <input type="time" class="wh-open" data-weekday="${i}" value="${(d.open_time || '09:00').slice(0,5)}" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;" ${d.is_open ? '' : 'disabled'}>
+        <span style="color:var(--text-3);">—</span>
+        <input type="time" class="wh-close" data-weekday="${i}" value="${(d.close_time || '20:00').slice(0,5)}" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;" ${d.is_open ? '' : 'disabled'}>
+      `;
+      box.appendChild(row);
+    }
+
+    box.querySelectorAll('.toggle').forEach(t => {
+      t.addEventListener('click', async () => {
+        const weekday = t.dataset.weekday;
+        const newOpen = !(t.dataset.open === 'true');
+        const openTime = box.querySelector(`.wh-open[data-weekday="${weekday}"]`).value;
+        const closeTime = box.querySelector(`.wh-close[data-weekday="${weekday}"]`).value;
+        await saveWorkingHour(weekday, { is_open: newOpen, open_time: openTime, close_time: closeTime });
+        await loadWorkingHours();
+      });
+    });
+
+    box.querySelectorAll('.wh-open, .wh-close').forEach(input => {
+      input.addEventListener('change', async () => {
+        const weekday = input.dataset.weekday;
+        const openTime = box.querySelector(`.wh-open[data-weekday="${weekday}"]`).value;
+        const closeTime = box.querySelector(`.wh-close[data-weekday="${weekday}"]`).value;
+        await saveWorkingHour(weekday, { open_time: openTime, close_time: closeTime });
+      });
+    });
+  }
+
+  async function saveWorkingHour(weekday, updates) {
+    await supabase.from('location_working_hours').upsert({
+      location_id: currentLocationId,
+      weekday: parseInt(weekday, 10),
+      is_open: true, open_time: '09:00', close_time: '20:00',
+      ...updates
+    }, { onConflict: 'location_id,weekday' });
+  }
   // ==== БОКСИ ====
   async function loadBoxes() {
     const { data: boxes, error } = await supabase
