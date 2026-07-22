@@ -151,15 +151,32 @@
 
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+    const todayStr = startOfDay.toISOString().slice(0, 10);
 
-    const { data: bookings, error } = await supabase
+    // чи сьогодні робочий день саме для цього мийника (за замовчуванням — так, якщо не задано)
+    const { data: scheduleRow } = await supabase
+      .from('staff_schedule_dates')
+      .select('is_working')
+      .eq('staff_id', staff.id)
+      .eq('work_date', todayStr)
+      .maybeSingle();
+    const isWorkingToday = scheduleRow ? scheduleRow.is_working : true;
+
+    let query = supabase
       .from('bookings')
       .select('*, cars(*), clients(*), wash_types(*)')
-      .eq('staff_id', staff.id)
+      .eq('location_id', staff.location_id)
       .gte('scheduled_at', startOfDay.toISOString())
       .lte('scheduled_at', endOfDay.toISOString())
       .in('status', ['pending', 'confirmed', 'in_progress'])
       .order('scheduled_at');
+
+    // у робочий день бачимо і свої, і непризначені записи мийки; у вихідний — тільки вже свої
+    query = isWorkingToday
+      ? query.or(`staff_id.eq.${staff.id},staff_id.is.null`)
+      : query.eq('staff_id', staff.id);
+
+    const { data: bookings, error } = await query;
 
     if (error) {
       pageSub.textContent = 'Помилка завантаження записів';
@@ -175,22 +192,25 @@
 
     pageSub.textContent = `У вас ${bookings.length} записів сьогодні`;
     jobsList.innerHTML = '';
-    bookings.forEach(b => jobsList.appendChild(renderJobCard(b)));
+    bookings.forEach(b => jobsList.appendChild(renderJobCard(b, staff)));
   }
 
-  function renderJobCard(b) {
+  function renderJobCard(b, staff) {
     const card = document.createElement('div');
     card.className = 'job-card';
     card.id = 'job-' + b.id;
 
     const statusLabel = { pending: 'Не підтверджено', confirmed: 'Заброньовано', in_progress: 'В процесі' }[b.status] || b.status;
     const pillClass = { pending: 'pending', confirmed: 'confirmed', in_progress: 'progress' }[b.status] || '';
-    const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.cars.plate || ''}` : 'Авто не вказано';
-    const clientLabel = b.clients?.full_name || b.clients?.phone || '';
-    const washLabel = b.wash_types?.name || '';
+    const carLabel = b.cars ? `${b.cars.brand_model || 'Авто'} · ${b.cars.plate || '—'}` : 'Авто не вказано';
+    const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
+    const washLabel = b.wash_types?.name || 'Послуга не вказана';
+    const unassigned = !b.staff_id;
 
     let actions = '';
-    if (b.status === 'pending') {
+    if (unassigned) {
+      actions = `<button class="primary btn-take" data-id="${b.id}">Взяти в роботу</button>`;
+    } else if (b.status === 'pending') {
       actions = `<button class="btn-confirm" data-id="${b.id}">Підтвердити</button>
                  <button class="danger btn-noshow" data-id="${b.id}">Авто не приїхало</button>`;
     } else if (b.status === 'confirmed') {
@@ -201,9 +221,10 @@
     }
 
     card.innerHTML = `
-      <div class="job-top"><span class="job-time">${formatTime(b.scheduled_at)}</span><span class="pill ${pillClass}">${statusLabel}</span></div>
-      <p class="job-car">${carLabel}</p>
-      <div class="job-meta">${clientLabel} · ${washLabel}</div>
+      <div class="job-top"><span class="job-time">${formatTime(b.scheduled_at)}</span><span class="pill ${pillClass}">${unassigned ? 'Вільний запис' : statusLabel}</span></div>
+      <p class="job-car"><b>Послуга:</b> ${washLabel}</p>
+      <div class="job-meta"><b>Клієнт:</b> ${clientLabel}</div>
+      <div class="job-meta"><b>Авто:</b> ${carLabel}</div>
       <div class="job-actions">${actions}</div>
     `;
     return card;
@@ -214,6 +235,13 @@
     const id = e.target.dataset.id;
     if (!id) return;
     const card = document.getElementById('job-' + id);
+
+    if (e.target.classList.contains('btn-take')) {
+      const { error } = await supabase.from('bookings').update({ staff_id: currentStaffForPush.id }).eq('id', id);
+      if (error) { alert('Не вдалося взяти запис у роботу (можливо, його вже взяв інший мийник)'); }
+      await loadToday(currentStaffForPush);
+      return;
+    }
 
     if (e.target.classList.contains('btn-noshow')) {
       await supabase.from('bookings').update({ status: 'no_show' }).eq('id', id);
