@@ -294,7 +294,8 @@
     extraServices = extras || [];
     washPrices = prices || [];
 
-    document.getElementById('m-staff').innerHTML = staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
+    document.getElementById('m-staff').innerHTML = '<option value="">Не призначено (побачать усі доступні мийники)</option>' +
+      staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
     document.getElementById('m-vtype').innerHTML = vehicleTypes.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
     document.getElementById('m-washtype').innerHTML = washTypes.map(w => `<option value="${w.id}" data-name="${w.name}">${w.name}</option>`).join('');
     document.getElementById('m-box').innerHTML = boxList.length
@@ -366,7 +367,7 @@
 
     document.getElementById('m-washtype').addEventListener('change', recomputeTotal);
     document.getElementById('m-vtype').addEventListener('change', recomputeTotal);
-    extrasBox.addEventListener('change', recomputeTotal);
+    extrasBox.addEventListener('change', () => { recomputeTotal(); refreshSlotGrid(); });
 
     // ==== ЗНИЖКА КЛІЄНТА (пошук за телефоном) ====
     currentClientDiscount = 0;
@@ -488,7 +489,11 @@
 
     const washTypeId = document.getElementById('m-washtype').value;
     const washType = washTypes.find(w => w.id === washTypeId);
-    const durationMinutes = washType?.duration_minutes ?? 30;
+    let durationMinutes = washType?.duration_minutes ?? 30;
+    document.querySelectorAll('#m-extras-box input:checked').forEach(cb => {
+      const extra = extraServices.find(e => e.id === cb.dataset.id);
+      durationMinutes += extra?.duration_minutes ?? 0;
+    });
     const boxId = document.getElementById('m-box').value;
 
     const start = new Date(modalSelectedDay); start.setHours(0, 0, 0, 0);
@@ -686,7 +691,7 @@
   document.getElementById('m-cancel').addEventListener('click', () => modal.style.display = 'none');
 
   document.getElementById('m-save').addEventListener('click', async () => {
-    const staffId = document.getElementById('m-staff').value;
+    const staffId = document.getElementById('m-staff').value || null;
     const boxId = document.getElementById('m-box').value || null;
     const washTypeId = document.getElementById('m-washtype').value;
     const phone = document.getElementById('m-phone').value.trim();
@@ -731,6 +736,15 @@
     } else {
       if (!modalSelectedSlotISO) { alert('Оберіть вільний час у календарі'); return; }
       scheduledAt = new Date(modalSelectedSlotISO);
+
+      // рахуємо повну тривалість: тип послуги + сума обраних додаткових послуг
+      const selectedWashType = washTypes.find(w => w.id === washTypeId);
+      let totalDuration = selectedWashType?.duration_minutes ?? 30;
+      document.querySelectorAll('#m-extras-box input:checked').forEach(cb => {
+        const extra = extraServices.find(e => e.id === cb.dataset.id);
+        totalDuration += extra?.duration_minutes ?? 0;
+      });
+      scheduledEnd = new Date(scheduledAt.getTime() + totalDuration * 60000);
     }
 
     try {
