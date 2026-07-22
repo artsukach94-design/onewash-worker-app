@@ -107,15 +107,30 @@
 
     const start = new Date(date); start.setHours(0, 0, 0, 0);
     const end = new Date(date); end.setHours(23, 59, 59, 999);
+    const dateStr = start.toISOString().slice(0, 10);
 
-    const { data: bookings, error } = await supabase
+    const { data: scheduleRow } = await supabase
+      .from('staff_schedule_dates')
+      .select('is_working')
+      .eq('staff_id', currentStaff.id)
+      .eq('work_date', dateStr)
+      .maybeSingle();
+    const isWorkingThatDay = scheduleRow ? scheduleRow.is_working : true;
+
+    let query = supabase
       .from('bookings')
       .select('*, cars(*), clients(*), wash_types(*)')
-      .eq('staff_id', currentStaff.id)
+      .eq('location_id', currentStaff.location_id)
       .gte('scheduled_at', start.toISOString())
       .lte('scheduled_at', end.toISOString())
       .not('status', 'in', '(cancelled,no_show)')
       .order('scheduled_at');
+
+    query = isWorkingThatDay
+      ? query.or(`staff_id.eq.${currentStaff.id},staff_id.is.null`)
+      : query.eq('staff_id', currentStaff.id);
+
+    const { data: bookings, error } = await query;
 
     if (error) { console.error(error); box.innerHTML = '<p>Помилка завантаження</p>'; return; }
 
@@ -128,11 +143,28 @@
     bookings.forEach(b => {
       const row = document.createElement('div');
       row.className = 'slot-row';
-      const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.wash_types?.name || ''}` : (b.wash_types?.name || '');
-      const clientLabel = b.clients?.full_name || b.clients?.phone || '';
-      row.innerHTML = `<span class="slot-time">${formatTime(b.scheduled_at)}</span>
-                        <div class="slot-body"><b>${carLabel}</b><span>${clientLabel}</span></div>`;
+      const carLabel = b.cars ? `${b.cars.brand_model || 'Авто'} · ${b.cars.plate || '—'}` : 'Авто не вказано';
+      const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
+      const washLabel = b.wash_types?.name || 'Послуга не вказана';
+      const unassigned = !b.staff_id;
+
+      row.innerHTML = `
+        <span class="slot-time">${formatTime(b.scheduled_at)}</span>
+        <div class="slot-body">
+          <b>${washLabel}</b>
+          <span>${clientLabel} · ${carLabel}</span>
+        </div>
+        ${unassigned ? `<span class="slot-take" data-id="${b.id}" style="color:var(--cyan-600);font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;">Взяти</span>` : ''}
+      `;
       box.appendChild(row);
+    });
+
+    box.querySelectorAll('.slot-take').forEach(el => {
+      el.addEventListener('click', async () => {
+        const { error } = await supabase.from('bookings').update({ staff_id: currentStaff.id }).eq('id', el.dataset.id);
+        if (error) alert('Не вдалося взяти запис у роботу (можливо, його вже взяв інший мийник)');
+        await loadDay(date);
+      });
     });
   }
 </script>
