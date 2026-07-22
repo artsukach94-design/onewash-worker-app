@@ -82,7 +82,10 @@
 <!-- МОДАЛКА ГРАФІКА — МІСЯЧНИЙ КАЛЕНДАР -->
 <div id="schedule-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
   <div style="background:var(--card);border-radius:12px;padding:20px;width:360px;">
-    <h3 style="margin:0 0 4px;font-size:15px;" id="modal-worker-name">Графік</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <h3 style="margin:0;font-size:15px;" id="modal-worker-name">Графік</h3>
+      <span id="modal-close-x" style="cursor:pointer;font-size:20px;color:var(--text-3);line-height:1;">×</span>
+    </div>
     <p style="margin:0 0 12px;font-size:12px;color:var(--text-2);">Клік по дню: не задано → робочий → вихідний → не задано</p>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
       <button class="btn btn-sm" id="modal-prev-month">←</button>
@@ -104,7 +107,10 @@
 <!-- МОДАЛКА ЗАПРОШЕННЯ МИЙНИКА -->
 <div id="invite-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
   <div style="background:var(--card);border-radius:12px;padding:20px;width:340px;">
-    <h3 style="margin:0 0 4px;font-size:15px;">Новий мийник</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <h3 style="margin:0;font-size:15px;">Новий мийник</h3>
+      <span id="invite-close-x" style="cursor:pointer;font-size:20px;color:var(--text-3);line-height:1;">×</span>
+    </div>
     <p style="margin:0 0 14px;font-size:12.5px;color:var(--text-2);">Система сама створить логін. Пароль потім передайте мийнику особисто (SMS, повідомлення тощо).</p>
     <div class="form-group"><label>Повне ім'я</label><input type="text" id="invite-name" placeholder="Іван Іваненко"></div>
     <div class="form-group"><label>Телефон</label><input type="tel" id="invite-phone" placeholder="+380971234567"></div>
@@ -250,6 +256,7 @@
   }
 
   document.getElementById('modal-close').addEventListener('click', () => scheduleModal.style.display = 'none');
+  document.getElementById('modal-close-x').addEventListener('click', () => scheduleModal.style.display = 'none');
   document.getElementById('modal-prev-month').addEventListener('click', () => {
     modalMonth.setMonth(modalMonth.getMonth() - 1);
     renderModalMonth();
@@ -353,6 +360,7 @@
     inviteModal.style.display = 'flex';
   });
   document.getElementById('invite-cancel').addEventListener('click', () => inviteModal.style.display = 'none');
+  document.getElementById('invite-close-x').addEventListener('click', () => inviteModal.style.display = 'none');
   document.getElementById('invite-regen-pw').addEventListener('click', () => {
     document.getElementById('invite-password').value = generatePassword();
   });
