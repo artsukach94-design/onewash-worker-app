@@ -158,7 +158,7 @@
     </div>
 
     <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;">
-      <input type="checkbox" id="m-prepaid" style="width:17px;height:17px;"> Передоплату вже отримано
+      <input type="checkbox" id="m-prepaid" style="width:17px;height:17px;"> Оплачено повністю (інакше — статус "Не оплачено", можна змінити пізніше)
     </label>
 
     <div style="display:flex;gap:8px;margin-top:16px;">
@@ -583,12 +583,10 @@
       const row = document.createElement('div');
       row.className = 'sched-row';
       const canCancel = !['cancelled', 'done', 'no_show'].includes(b.status);
-      const payClass = b.prepayment_status === 'paid' ? 'paid' : 'unpaid';
-      const payText = b.prepayment_status === 'paid' ? 'Передоплата ✓' : 'Не оплачено';
       row.innerHTML = `
         <div class="sched-time">${formatTime(b.scheduled_at)}${endLabel}</div>
         <div class="sched-info"><b>${carLabel}</b><span>${clientLabel} · ${washLabel} · ${staffLabel}${boxLabel}</span></div>
-        <span class="pay-badge ${payClass} pay-toggle" data-id="${b.id}" data-status="${b.prepayment_status}" style="cursor:pointer;">${payText}</span>
+        ${renderPayBadge(b)}
         <span class="pill ${pillClasses[b.status] || ''}">${statusLabels[b.status] || b.status}</span>
         ${canCancel ? `<button class="btn btn-sm cancel-btn" data-id="${b.id}" style="margin-left:8px;color:var(--red-600);">Скасувати</button>` : ''}
       `;
@@ -603,13 +601,80 @@
       });
     });
 
-    document.querySelectorAll('.pay-toggle').forEach(badge => {
-      badge.addEventListener('click', async () => {
-        const newStatus = badge.dataset.status === 'paid' ? 'unpaid' : 'paid';
-        await supabase.from('bookings').update({ prepayment_status: newStatus }).eq('id', badge.dataset.id);
-        await loadDay();
-      });
+    document.querySelectorAll('.pay-badge').forEach(badge => {
+      badge.addEventListener('click', () => openPayModal(badge.dataset.id, loadDay));
     });
+  }
+
+  // ==== СТАТУС ОПЛАТИ: ВІДОБРАЖЕННЯ ТА РУЧНЕ РЕДАГУВАННЯ ====
+  function renderPayBadge(b) {
+    const total = Number(b.total_price || 0);
+    const paid = Number(b.paid_amount || 0);
+    const remaining = Math.max(total - paid, 0);
+
+    let cls = 'unpaid', text = 'Не оплачено';
+    if (b.payment_status === 'paid') { cls = 'paid'; text = 'Оплачено ✓'; }
+    else if (b.payment_status === 'partial') { cls = 'unpaid'; text = `Передоплата ${paid} з ${total} грн (залишилось ${remaining} грн)`; }
+
+    return `<span class="pay-badge ${cls}" data-id="${b.id}" style="cursor:pointer;">${text}</span>`;
+  }
+
+  function ensurePayModal() {
+    if (document.getElementById('pay-status-modal')) return;
+    const div = document.createElement('div');
+    div.id = 'pay-status-modal';
+    div.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:30;';
+    div.innerHTML = `
+      <div style="background:var(--card);border-radius:12px;padding:20px;width:320px;">
+        <h3 style="margin:0 0 14px;font-size:15px;">Статус оплати</h3>
+        <div class="form-group">
+          <label>Статус</label>
+          <select id="pm-status">
+            <option value="not_paid">Не оплачено</option>
+            <option value="partial">Передоплату внесено</option>
+            <option value="paid">Оплачено повністю</option>
+          </select>
+        </div>
+        <div class="form-group" id="pm-amount-wrap">
+          <label>Внесена сума, грн</label>
+          <input type="text" id="pm-amount">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn" style="flex:1;" id="pm-cancel">Скасувати</button>
+          <button class="btn btn-primary" style="flex:1;" id="pm-save">Зберегти</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(div);
+
+    document.getElementById('pm-status').addEventListener('change', (e) => {
+      document.getElementById('pm-amount-wrap').style.display = e.target.value === 'partial' ? 'block' : 'none';
+    });
+    document.getElementById('pm-cancel').addEventListener('click', () => div.style.display = 'none');
+  }
+
+  async function openPayModal(bookingId, onSaved) {
+    ensurePayModal();
+    const modal = document.getElementById('pay-status-modal');
+
+    const { data: b } = await supabase.from('bookings').select('payment_status, paid_amount, total_price').eq('id', bookingId).single();
+    if (!b) return;
+
+    document.getElementById('pm-status').value = b.payment_status || 'not_paid';
+    document.getElementById('pm-amount').value = b.paid_amount || 0;
+    document.getElementById('pm-amount-wrap').style.display = (b.payment_status === 'partial') ? 'block' : 'none';
+    modal.style.display = 'flex';
+
+    document.getElementById('pm-save').onclick = async () => {
+      const status = document.getElementById('pm-status').value;
+      let paidAmount = 0;
+      if (status === 'paid') paidAmount = Number(b.total_price || 0);
+      else if (status === 'partial') paidAmount = parseFloat(document.getElementById('pm-amount').value) || 0;
+
+      await supabase.from('bookings').update({ payment_status: status, paid_amount: paidAmount }).eq('id', bookingId);
+      modal.style.display = 'none';
+      await onSaved();
+    };
   }
 
   // ==== РУЧНЕ БРОНЮВАННЯ ====
@@ -706,7 +771,8 @@
         status: 'confirmed',
         source: 'admin',
         total_price: total,
-        prepayment_status: isPrepaid ? 'paid' : 'unpaid'
+        payment_status: isPrepaid ? 'paid' : 'not_paid',
+        paid_amount: isPrepaid ? total : 0
       }).select().single();
       if (bErr) throw bErr;
 
