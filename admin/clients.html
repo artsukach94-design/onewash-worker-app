@@ -83,7 +83,10 @@
 <!-- МОДАЛКА СПИСАННЯ КЕШБЕКУ -->
 <div id="cashback-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
   <div style="background:var(--card);border-radius:12px;padding:20px;width:320px;">
-    <h3 style="margin:0 0 4px;font-size:15px;" id="cb-client-name">Списати кешбек</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <h3 style="margin:0;font-size:15px;" id="cb-client-name">Списати кешбек</h3>
+      <span id="cb-close-x" style="cursor:pointer;font-size:20px;color:var(--text-3);line-height:1;">×</span>
+    </div>
     <p style="margin:0 0 14px;font-size:12.5px;color:var(--text-2);">Доступно: <b id="cb-balance">0</b> грн</p>
     <div class="form-group"><label>Сума списання, грн</label><input type="text" id="cb-amount"></div>
     <div style="display:flex;gap:8px;margin-top:10px;">
@@ -96,7 +99,10 @@
 <!-- МОДАЛКА ІСТОРІЇ МИЙОК -->
 <div id="history-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;overflow-y:auto;padding:30px 0;">
   <div style="background:var(--card);border-radius:12px;padding:20px;width:520px;max-height:85vh;overflow-y:auto;">
-    <h3 style="margin:0 0 14px;font-size:15px;" id="hist-client-name">Історія мийок</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="margin:0;font-size:15px;" id="hist-client-name">Історія мийок</h3>
+      <span id="hist-close-x" style="cursor:pointer;font-size:20px;color:var(--text-3);line-height:1;">×</span>
+    </div>
     <div id="hist-list">Завантаження...</div>
     <button class="btn" style="width:100%;margin-top:14px;" id="hist-close">Закрити</button>
   </div>
@@ -261,6 +267,7 @@
     cashbackModal.style.display = 'flex';
   }
 
+  document.getElementById('cb-close-x').addEventListener('click', () => cashbackModal.style.display = 'none');
   document.getElementById('cb-cancel').addEventListener('click', () => cashbackModal.style.display = 'none');
 
   document.getElementById('cb-save').addEventListener('click', async () => {
@@ -283,6 +290,7 @@
 
   // ==== ІСТОРІЯ МИЙОК З ФОТО ====
   const historyModal = document.getElementById('history-modal');
+  document.getElementById('hist-close-x').addEventListener('click', () => historyModal.style.display = 'none');
   document.getElementById('hist-close').addEventListener('click', () => historyModal.style.display = 'none');
 
   async function openWashHistory(clientId, clientName) {
