@@ -123,26 +123,29 @@
 
   async function refreshCheckinBanner(staff) {
     const banner = document.getElementById('checkin-banner');
-    const todayStr = new Date().toISOString().slice(0, 10);
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
 
-    const { data: scheduleRow } = await supabase
-      .from('staff_schedule_dates')
-      .select('is_working, checked_in_at')
-      .eq('staff_id', staff.id)
-      .eq('work_date', todayStr)
-      .maybeSingle();
+      const { data: scheduleRow, error: schedErr } = await supabase
+        .from('staff_schedule_dates')
+        .select('is_working, checked_in_at')
+        .eq('staff_id', staff.id)
+        .eq('work_date', todayStr)
+        .maybeSingle();
 
-    // якщо графік на сьогодні взагалі не заданий — вважаємо робочим днем за замовчуванням
-    const isWorkingToday = scheduleRow ? scheduleRow.is_working : true;
+      if (schedErr) throw schedErr;
 
-    if (!isWorkingToday) {
-      banner.style.display = 'none';
-      return;
-    }
+      // якщо графік на сьогодні взагалі не заданий — вважаємо робочим днем за замовчуванням
+      const isWorkingToday = scheduleRow ? scheduleRow.is_working : true;
 
-    if (scheduleRow?.checked_in_at) {
-      const time = new Date(scheduleRow.checked_in_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-      banner.style.display = 'flex';
+      if (!isWorkingToday) {
+        banner.style.display = 'none';
+        return;
+      }
+
+      if (scheduleRow?.checked_in_at) {
+        const time = new Date(scheduleRow.checked_in_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+        banner.style.display = 'flex';
       banner.innerHTML = `<div style="display:flex;gap:10px;align-items:center;"><div class="ic">✅</div><div><b>Ви на роботі</b><br><span style="font-size:11.5px;color:var(--text-2);">Відмічено о ${time}</span></div></div>`;
       return;
     }
@@ -195,6 +198,12 @@
         btn.disabled = false; btn.textContent = 'На роботі';
       }, { enableHighAccuracy: true, timeout: 15000 });
     });
+
+    } catch (err) {
+      console.error('Помилка банера "На роботі":', err);
+      banner.style.display = 'flex';
+      banner.innerHTML = `<div style="font-size:12px;color:var(--red-600);"><b>Помилка банера "На роботі":</b><br>${(err && err.message) ? err.message : String(err)}</div>`;
+    }
   }
 
   async function refreshPushBanner() {
