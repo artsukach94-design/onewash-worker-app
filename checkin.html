@@ -96,22 +96,22 @@
         <div class="photo-row">
           <div class="photo-slot">
             <label>Перед <span class="req">обов'язково</span></label>
-            <input type="file" id="photo-front" accept="image/*" capture="environment" required>
+            <input type="file" id="photo-front" accept="image/*" required>
             <img class="preview" id="preview-front">
           </div>
           <div class="photo-slot">
             <label>Зад <span class="opt">за бажанням</span></label>
-            <input type="file" id="photo-back" accept="image/*" capture="environment">
+            <input type="file" id="photo-back" accept="image/*">
             <img class="preview" id="preview-back">
           </div>
           <div class="photo-slot">
             <label>Ліво <span class="opt">за бажанням</span></label>
-            <input type="file" id="photo-left" accept="image/*" capture="environment">
+            <input type="file" id="photo-left" accept="image/*">
             <img class="preview" id="preview-left">
           </div>
           <div class="photo-slot">
             <label>Право <span class="opt">за бажанням</span></label>
-            <input type="file" id="photo-right" accept="image/*" capture="environment">
+            <input type="file" id="photo-right" accept="image/*">
             <img class="preview" id="preview-right">
           </div>
         </div>
@@ -177,6 +177,11 @@
 
   function fillModelsFor(brand) {
     const modelSelect = document.getElementById('model-select');
+    if (!brand) {
+      modelSelect.innerHTML = '<option value="">— Не вказано —</option>';
+      document.getElementById('model-other-wrap').style.display = 'none';
+      return;
+    }
     const models = CAR_BRANDS[brand] || [];
     modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('')
       + '<option value="__other__">Інша модель…</option>';
@@ -185,7 +190,8 @@
 
   function initBrandModelSelects() {
     const brandSelect = document.getElementById('brand-select');
-    brandSelect.innerHTML = Object.keys(CAR_BRANDS).sort().map(b => `<option value="${b}">${b}</option>`).join('')
+    brandSelect.innerHTML = '<option value="">— Не вказано —</option>' +
+      Object.keys(CAR_BRANDS).sort().map(b => `<option value="${b}">${b}</option>`).join('')
       + '<option value="__other__">Інша марка…</option>';
     fillModelsFor(brandSelect.value);
 
