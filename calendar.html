@@ -101,13 +101,22 @@
     }
   }
 
+  // Правильне форматування дати РРРР-ММ-ДД за ЛОКАЛЬНИМ часом (НЕ через toISOString,
+  // який рахує за UTC і зсуває дату на день назад для київського часового поясу)
+  function toLocalDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
   async function loadDay(date) {
     const box = document.getElementById('day-bookings');
     box.innerHTML = '<p style="font-size:12.5px;color:var(--text-2);padding:10px 0;">Завантаження...</p>';
 
     const start = new Date(date); start.setHours(0, 0, 0, 0);
     const end = new Date(date); end.setHours(23, 59, 59, 999);
-    const dateStr = start.toISOString().slice(0, 10);
+    const dateStr = toLocalDateStr(start);
 
     const { data: scheduleRow } = await supabase
       .from('staff_schedule_dates')
