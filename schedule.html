@@ -110,6 +110,15 @@
     renderMonth();
   });
 
+  // Правильне форматування дати РРРР-ММ-ДД за ЛОКАЛЬНИМ часом (НЕ через toISOString,
+  // який рахує за UTC і зсуває дату на день назад для київського часового поясу)
+  function toLocalDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
   async function renderMonth() {
     document.getElementById('month-label').textContent =
       viewMonth.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
@@ -120,9 +129,9 @@
     const lastDay = new Date(year, month + 1, 0);
     const startOffset = (firstDay.getDay() + 6) % 7;
 
-    const monthStart = firstDay.toISOString().slice(0, 10);
-    const monthEnd = lastDay.toISOString().slice(0, 10);
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const monthStart = toLocalDateStr(firstDay);
+    const monthEnd = toLocalDateStr(lastDay);
+    const todayStr = toLocalDateStr(new Date());
 
     const { data: rows, error } = await supabase
       .from('staff_schedule_dates')
@@ -142,7 +151,7 @@
 
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const dateObj = new Date(year, month, d);
-      const dateStr = dateObj.toISOString().slice(0, 10);
+      const dateStr = toLocalDateStr(dateObj);
       const state = stateByDate[dateStr];
 
       const cell = document.createElement('div');
