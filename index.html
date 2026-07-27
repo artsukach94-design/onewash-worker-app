@@ -135,6 +135,9 @@
 
       if (schedErr) throw schedErr;
 
+      // ЧАСОВА ДІАГНОСТИКА — приберемо, щойно знайдемо причину
+      alert('ДІАГНОСТИКА:\ntodayStr=' + todayStr + '\nscheduleRow=' + JSON.stringify(scheduleRow) + '\nstaff.id=' + staff.id);
+
       // якщо графік на сьогодні взагалі не заданий — вважаємо робочим днем за замовчуванням
       const isWorkingToday = scheduleRow ? scheduleRow.is_working : true;
 
