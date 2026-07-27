@@ -112,6 +112,15 @@
   });
 
   // ==== "НА РОБОТІ" З ПЕРЕВІРКОЮ ГЕОЛОКАЦІЇ ====
+  // Правильне форматування дати РРРР-ММ-ДД за ЛОКАЛЬНИМ часом (НЕ через toISOString,
+  // який рахує за UTC і зсуває дату на день назад для київського часового поясу)
+  function toLocalDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
   function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const toRad = (d) => d * Math.PI / 180;
@@ -124,7 +133,7 @@
   async function refreshCheckinBanner(staff) {
     const banner = document.getElementById('checkin-banner');
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = toLocalDateStr(new Date());
 
       const { data: scheduleRow, error: schedErr } = await supabase
         .from('staff_schedule_dates')
@@ -134,9 +143,6 @@
         .maybeSingle();
 
       if (schedErr) throw schedErr;
-
-      // ЧАСОВА ДІАГНОСТИКА — приберемо, щойно знайдемо причину
-      alert('ДІАГНОСТИКА:\ntodayStr=' + todayStr + '\nscheduleRow=' + JSON.stringify(scheduleRow) + '\nstaff.id=' + staff.id);
 
       // якщо графік на сьогодні взагалі не заданий — вважаємо робочим днем за замовчуванням
       const isWorkingToday = scheduleRow ? scheduleRow.is_working : true;
@@ -267,7 +273,7 @@
 
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
-    const todayStr = startOfDay.toISOString().slice(0, 10);
+    const todayStr = toLocalDateStr(startOfDay);
 
     // чи сьогодні робочий день саме для цього мийника (за замовчуванням — так, якщо не задано)
     const { data: scheduleRow } = await supabase
