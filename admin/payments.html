@@ -393,6 +393,11 @@
 
   function fillModelsFor(brand) {
     const modelSelect = document.getElementById('l-model-select');
+    if (!brand) {
+      modelSelect.innerHTML = '<option value="">— Не вказано —</option>';
+      document.getElementById('l-model-other-wrap').style.display = 'none';
+      return;
+    }
     const models = CAR_BRANDS[brand] || [];
     modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('') + '<option value="__other__">Інша модель…</option>';
     document.getElementById('l-model-other-wrap').style.display = 'none';
@@ -400,7 +405,8 @@
 
   function initBrandModelSelects() {
     const brandSelect = document.getElementById('l-brand-select');
-    brandSelect.innerHTML = Object.keys(CAR_BRANDS).sort().map(b => `<option value="${b}">${b}</option>`).join('') + '<option value="__other__">Інша марка…</option>';
+    brandSelect.innerHTML = '<option value="">— Не вказано —</option>' +
+      Object.keys(CAR_BRANDS).sort().map(b => `<option value="${b}">${b}</option>`).join('') + '<option value="__other__">Інша марка…</option>';
     fillModelsFor(brandSelect.value);
 
     brandSelect.addEventListener('change', () => {
