@@ -74,6 +74,19 @@
           </div>
         </div>
 
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Відвідуваність — коли мийники прийшли на роботу</h3>
+            <input type="date" id="attendance-date" style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;">
+          </div>
+          <div class="panel-body" style="padding:0;">
+            <table id="attendance-table">
+              <tr><th>Мийник</th><th>Графік на цей день</th><th>Прийшов на роботу</th><th>Відхилення від мийки</th></tr>
+              <tr><td colspan="4" class="empty-state">Оберіть дату</td></tr>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -144,7 +157,54 @@
     document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
     currentLocationId = locationId;
     await loadWorkers();
+
+    const dateInput = document.getElementById('attendance-date');
+    dateInput.value = new Date().toISOString().slice(0, 10);
+    await loadAttendance(dateInput.value);
+    dateInput.addEventListener('change', () => loadAttendance(dateInput.value));
   });
+
+  async function loadAttendance(dateStr) {
+    const table = document.getElementById('attendance-table');
+    table.innerHTML = '<tr><th>Мийник</th><th>Графік на цей день</th><th>Прийшов на роботу</th><th>Відхилення від мийки</th></tr><tr><td colspan="4" class="empty-state">Завантаження...</td></tr>';
+
+    const { data: workers } = await supabase
+      .from('staff').select('id, full_name').eq('location_id', currentLocationId).order('full_name');
+
+    const { data: scheduleRows } = await supabase
+      .from('staff_schedule_dates').select('*').eq('work_date', dateStr);
+
+    const scheduleByStaff = {};
+    (scheduleRows || []).forEach(s => { scheduleByStaff[s.staff_id] = s; });
+
+    if (!workers || workers.length === 0) {
+      table.innerHTML = '<tr><th>Мийник</th><th>Графік на цей день</th><th>Прийшов на роботу</th><th>Відхилення від мийки</th></tr><tr><td colspan="4" class="empty-state">Мийників ще немає</td></tr>';
+      return;
+    }
+
+    table.innerHTML = '<tr><th>Мийник</th><th>Графік на цей день</th><th>Прийшов на роботу</th><th>Відхилення від мийки</th></tr>';
+    workers.forEach(w => {
+      const s = scheduleByStaff[w.id];
+      const isWorking = s ? s.is_working : true;
+      const scheduleLabel = isWorking
+        ? '<span style="color:var(--green-600);font-weight:600;">Робочий день</span>'
+        : '<span style="color:var(--text-3);">Вихідний</span>';
+
+      let checkinLabel = '<span style="color:var(--text-3);">—</span>';
+      let distanceLabel = '—';
+      if (s?.checked_in_at) {
+        const time = new Date(s.checked_in_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+        checkinLabel = `<span style="color:var(--green-600);font-weight:600;">✅ ${time}</span>`;
+        distanceLabel = s.checkin_distance_meters != null ? `${s.checkin_distance_meters} м` : '—';
+      } else if (isWorking) {
+        checkinLabel = '<span style="color:var(--red-600);">Ще не прийшов</span>';
+      }
+
+      const row = document.createElement('tr');
+      row.innerHTML = `<td>${w.full_name}</td><td>${scheduleLabel}</td><td>${checkinLabel}</td><td>${distanceLabel}</td>`;
+      table.appendChild(row);
+    });
+  }
 
   async function loadWorkers() {
     const { data: workers, error } = await supabase
