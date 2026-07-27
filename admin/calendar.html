@@ -708,8 +708,8 @@
     const selectedOption = document.getElementById('m-washtype').options[document.getElementById('m-washtype').selectedIndex];
     const isChemical = selectedOption && selectedOption.dataset.name === 'Хімчистка';
 
-    if (!staffId || !phone) {
-      alert('Заповніть принаймні мийника і телефон клієнта');
+    if (!phone) {
+      alert('Заповніть принаймні телефон клієнта');
       return;
     }
 
