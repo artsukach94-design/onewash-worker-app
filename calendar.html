@@ -154,6 +154,7 @@
           <b>${washLabel}</b>
           <span>${clientLabel} · ${carLabel}</span>
         </div>
+        ${b.clients?.phone ? `<a href="tel:${b.clients.phone}" style="color:var(--cyan-600);font-size:16px;text-decoration:none;margin-right:6px;" title="Подзвонити клієнту">📞</a>` : ''}
         ${unassigned ? `<span class="slot-take" data-id="${b.id}" style="color:var(--cyan-600);font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;">Взяти</span>` : ''}
       `;
       box.appendChild(row);
