@@ -159,7 +159,7 @@
     await loadWorkers();
 
     const dateInput = document.getElementById('attendance-date');
-    dateInput.value = new Date().toISOString().slice(0, 10);
+    dateInput.value = toLocalDateStr(new Date());
     await loadAttendance(dateInput.value);
     dateInput.addEventListener('change', () => loadAttendance(dateInput.value));
   });
@@ -326,6 +326,15 @@
     renderModalMonth();
   });
 
+  // Правильне форматування дати РРРР-ММ-ДД за ЛОКАЛЬНИМ часом (НЕ через toISOString,
+  // який рахує за UTC і зсуває дату на день назад для київського часового поясу)
+  function toLocalDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
   async function renderModalMonth() {
     document.getElementById('modal-month-label').textContent =
       modalMonth.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
@@ -336,8 +345,8 @@
     const lastDay = new Date(year, month + 1, 0);
     const startOffset = (firstDay.getDay() + 6) % 7; // понеділок = 0
 
-    const monthStart = firstDay.toISOString().slice(0, 10);
-    const monthEnd = lastDay.toISOString().slice(0, 10);
+    const monthStart = toLocalDateStr(firstDay);
+    const monthEnd = toLocalDateStr(lastDay);
 
     const { data: rows, error } = await supabase
       .from('staff_schedule_dates')
@@ -359,7 +368,7 @@
 
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const dateObj = new Date(year, month, d);
-      const dateStr = dateObj.toISOString().slice(0, 10);
+      const dateStr = toLocalDateStr(dateObj);
       const state = stateByDate[dateStr] || 'none';
 
       const cell = document.createElement('div');
