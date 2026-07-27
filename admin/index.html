@@ -76,6 +76,11 @@
           <div class="panel-body" id="schedule-list">Завантаження...</div>
         </div>
 
+        <div class="panel">
+          <div class="panel-head"><h3>Готові авто сьогодні (<span id="ready-count">0</span>)</h3></div>
+          <div class="panel-body" id="ready-cars-list" style="display:flex;gap:12px;flex-wrap:wrap;">Завантаження...</div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -125,7 +130,9 @@
     document.getElementById('stat-noshow').textContent = noShow;
 
     const todayStr = new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
-    document.getElementById('page-sub').textContent = `${todayStr} — ${total} записів`;
+    document.getElementById('page-sub').textContent = `${todayStr} — ${total} записів, ${done} авто вже помито сьогодні`;
+
+    await loadReadyCars(bookings.filter(b => b.status === 'done'));
 
     const list = document.getElementById('schedule-list');
     if (bookings.length === 0) {
@@ -161,6 +168,44 @@
 
     list.querySelectorAll('.pay-badge').forEach(badge => {
       badge.addEventListener('click', () => openPayModal(badge.dataset.id, () => loadDashboard(locationId)));
+    });
+  }
+
+  async function loadReadyCars(doneBookings) {
+    const box = document.getElementById('ready-cars-list');
+    document.getElementById('ready-count').textContent = doneBookings.length;
+
+    if (doneBookings.length === 0) {
+      box.innerHTML = '<span style="font-size:12.5px;color:var(--text-2);">Ще немає завершених мийок сьогодні</span>';
+      return;
+    }
+
+    const bookingIds = doneBookings.map(b => b.id);
+    const { data: videos } = await supabase.from('wash_videos').select('*').in('booking_id', bookingIds);
+    const videosByBooking = {};
+    (videos || []).forEach(v => { videosByBooking[v.booking_id] = v; });
+
+    box.innerHTML = '';
+    doneBookings.forEach(b => {
+      const video = videosByBooking[b.id];
+      const carLabel = b.cars ? `${b.cars.brand_model || 'Авто'} · ${b.cars.plate || ''}` : 'Авто не вказано';
+      const time = new Date(b.scheduled_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+
+      const card = document.createElement('div');
+      card.style.cssText = 'width:150px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg);';
+      if (video) {
+        const { data: pub } = supabase.storage.from('wash-videos').getPublicUrl(video.storage_path);
+        card.innerHTML = `
+          <video src="${pub.publicUrl}" controls style="width:100%;height:100px;object-fit:cover;background:#000;"></video>
+          <div style="padding:8px 10px;"><b style="font-size:11.5px;display:block;">${carLabel}</b><span style="font-size:10.5px;color:var(--text-2);">${time}</span></div>
+        `;
+      } else {
+        card.innerHTML = `
+          <div style="width:100%;height:100px;display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:11px;">Без відео</div>
+          <div style="padding:8px 10px;"><b style="font-size:11.5px;display:block;">${carLabel}</b><span style="font-size:10.5px;color:var(--text-2);">${time}</span></div>
+        `;
+      }
+      box.appendChild(card);
     });
   }
 
