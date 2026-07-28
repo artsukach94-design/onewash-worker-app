@@ -86,6 +86,37 @@
   </div>
 </div>
 
+<!-- МОДАЛКА ДЕТАЛЕЙ МИЙКИ (АВТО, ФОТО, ВІДЕО) -->
+<div id="car-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:30;overflow-y:auto;padding:30px 0;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:460px;max-height:88vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <h3 style="margin:0;font-size:15px;">Деталі мийки</h3>
+      <span id="car-close-x" style="cursor:pointer;font-size:20px;color:var(--text-3);line-height:1;">×</span>
+    </div>
+    <div id="car-modal-body" style="font-size:13px;">Завантаження...</div>
+  </div>
+</div>
+
+<!-- МОДАЛКА ДЕТАЛЕЙ КЛІЄНТА -->
+<div id="client-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:30;overflow-y:auto;padding:30px 0;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:380px;max-height:88vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="margin:0;font-size:15px;">Дані клієнта</h3>
+      <span id="client-close-x" style="cursor:pointer;font-size:20px;color:var(--text-3);line-height:1;">×</span>
+    </div>
+    <div class="form-group"><label>Ім'я</label><input type="text" id="cl-name"></div>
+    <div class="form-group"><label>Телефон</label><input type="text" id="cl-phone"></div>
+    <div class="form-group"><label>Постійна знижка, %</label><input type="text" id="cl-discount"></div>
+    <div class="form-group"><label>Кешбек, грн</label><input type="text" id="cl-cashback" disabled style="background:var(--bg);color:var(--text-2);"></div>
+    <div class="section-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin:14px 0 8px;">Авто клієнта</div>
+    <div id="cl-cars-list" style="margin-bottom:16px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" style="flex:1;" id="client-cancel">Закрити</button>
+      <button class="btn btn-primary" style="flex:1;" id="client-save">Зберегти</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
   import { supabase, initAdminPage, wireLoginForm, logout, formatTime, subscribeToTable } from './app.js';
 
@@ -157,8 +188,8 @@
       row.innerHTML = `
         <div class="sched-time">${formatTime(b.scheduled_at)}</div>
         <div class="sched-info">
-          <b>${carLabel}</b>
-          <span>${clientLabel} · ${washLabel} · ${staffLabel}${boxLabel} · ${sourceLabel}</span>
+          <b class="open-car" data-id="${b.id}" style="cursor:pointer;text-decoration:underline;">${carLabel}</b>
+          <span><span class="open-client" data-id="${b.clients?.id || ''}" style="cursor:pointer;text-decoration:underline;color:var(--cyan-600);">${clientLabel}</span> · ${washLabel} · ${staffLabel}${boxLabel} · ${sourceLabel}</span>
         </div>
         ${renderPayBadge(b)}
         <span class="pill ${pillClasses[b.status] || ''}">${statusLabels[b.status] || b.status}</span>
@@ -168,6 +199,13 @@
 
     list.querySelectorAll('.pay-badge').forEach(badge => {
       badge.addEventListener('click', () => openPayModal(badge.dataset.id, () => loadDashboard(locationId)));
+    });
+    list.querySelectorAll('.open-car').forEach(el => {
+      el.addEventListener('click', () => openCarModal(el.dataset.id));
+    });
+    list.querySelectorAll('.open-client').forEach(el => {
+      if (!el.dataset.id) return;
+      el.addEventListener('click', () => openClientModal(el.dataset.id, () => loadDashboard(locationId)));
     });
   }
 
@@ -277,6 +315,104 @@
       await supabase.from('bookings').update({ payment_status: status, paid_amount: paidAmount }).eq('id', bookingId);
       modal.style.display = 'none';
       await onSaved();
+    };
+  }
+
+  // ==== МОДАЛКА ДЕТАЛЕЙ МИЙКИ (АВТО, ФОТО, ВІДЕО) ====
+  const carModal = document.getElementById('car-modal');
+  document.getElementById('car-close-x').addEventListener('click', () => carModal.style.display = 'none');
+
+  async function openCarModal(bookingId) {
+    carModal.style.display = 'flex';
+    const body = document.getElementById('car-modal-body');
+    body.innerHTML = 'Завантаження...';
+
+    const { data: b, error } = await supabase
+      .from('bookings')
+      .select('*, cars(*), clients(*), wash_types(*), staff(full_name), wash_boxes(name), wash_photos(*), wash_videos(*)')
+      .eq('id', bookingId).single();
+
+    if (error || !b) { body.innerHTML = '<p>Помилка завантаження</p>'; return; }
+
+    const carLabel = b.cars ? `${b.cars.brand_model || 'Авто не вказано'} · ${b.cars.plate || '—'}` : 'Авто не вказано';
+    const date = new Date(b.scheduled_at).toLocaleString('uk-UA', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
+    const angleLabels = { front: 'перед', back: 'зад', left: 'ліво', right: 'право' };
+    const photosHtml = (b.wash_photos || []).map(p => {
+      const { data: pub } = supabase.storage.from('wash-photos').getPublicUrl(p.storage_path);
+      return `<a href="${pub.publicUrl}" target="_blank" style="display:inline-block;margin:0 6px 6px 0;">
+        <img src="${pub.publicUrl}" style="width:70px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--border);" title="${angleLabels[p.angle] || p.angle}">
+      </a>`;
+    }).join('');
+
+    const videosHtml = (b.wash_videos || []).map(v => {
+      const { data: pub } = supabase.storage.from('wash-videos').getPublicUrl(v.storage_path);
+      return `<video src="${pub.publicUrl}" controls style="width:100%;border-radius:8px;margin-bottom:8px;background:#000;"></video>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div style="margin-bottom:10px;"><b style="font-size:14.5px;">${carLabel}</b><br><span style="color:var(--text-2);">${b.cars?.color || ''}</span></div>
+      <div class="sched-info" style="margin-bottom:12px;">
+        <span>Дата: <b>${date}</b></span><br>
+        <span>Послуга: <b>${b.wash_types?.name || '—'}</b>${b.wash_boxes?.name ? ' · ' + b.wash_boxes.name : ''}</span><br>
+        <span>Мийник: <b>${b.staff?.full_name || 'Не призначено'}</b></span><br>
+        <span>Клієнт: <b>${b.clients?.full_name || b.clients?.phone || '—'}</b></span><br>
+        <span>Вартість: <b>${Number(b.total_price || 0).toLocaleString('uk-UA')} грн</b></span>
+        ${b.notes ? `<br><span>Нотатки: <b>${b.notes}</b></span>` : ''}
+      </div>
+      <div class="section-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin:10px 0 8px;">Фото</div>
+      <div>${photosHtml || '<span style="color:var(--text-3);font-size:12px;">Фото немає</span>'}</div>
+      <div class="section-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin:14px 0 8px;">Відео завершення</div>
+      <div>${videosHtml || '<span style="color:var(--text-3);font-size:12px;">Відео ще немає (з\'явиться після завершення мийки)</span>'}</div>
+    `;
+  }
+
+  // ==== МОДАЛКА ДЕТАЛЕЙ КЛІЄНТА ====
+  const clientModal = document.getElementById('client-modal');
+  document.getElementById('client-close-x').addEventListener('click', () => clientModal.style.display = 'none');
+  document.getElementById('client-cancel').addEventListener('click', () => clientModal.style.display = 'none');
+
+  let editingClientId = null;
+
+  async function openClientModal(clientId, onSaved) {
+    editingClientId = clientId;
+    clientModal.style.display = 'flex';
+
+    const { data: c, error } = await supabase.from('clients').select('*, cars(*)').eq('id', clientId).single();
+    if (error || !c) { clientModal.style.display = 'none'; return; }
+
+    document.getElementById('cl-name').value = c.full_name || '';
+    document.getElementById('cl-phone').value = c.phone || '';
+    document.getElementById('cl-discount').value = c.permanent_discount_percent || 0;
+    document.getElementById('cl-cashback').value = Number(c.cashback_balance || 0).toLocaleString('uk-UA');
+
+    const carsBox = document.getElementById('cl-cars-list');
+    carsBox.innerHTML = (c.cars || []).map(car => `
+      <span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:4px 9px 4px 11px;font-size:11.5px;margin:2px 3px 2px 0;">
+        ${car.brand_model || 'Авто'} (${car.plate || '—'})
+        <span class="cl-car-del" data-car-id="${car.id}" style="cursor:pointer;color:var(--red-600);font-weight:700;">×</span>
+      </span>`).join('') || '<span style="font-size:12px;color:var(--text-3);">Авто ще немає</span>';
+
+    carsBox.querySelectorAll('.cl-car-del').forEach(el => {
+      el.addEventListener('click', async () => {
+        if (!confirm('Видалити це авто клієнта?')) return;
+        await supabase.from('cars').delete().eq('id', el.dataset.carId);
+        await openClientModal(clientId, onSaved);
+      });
+    });
+
+    document.getElementById('client-save').onclick = async () => {
+      const fullName = document.getElementById('cl-name').value.trim();
+      const phone = document.getElementById('cl-phone').value.trim();
+      const discount = parseFloat(document.getElementById('cl-discount').value) || 0;
+
+      const { error: updErr } = await supabase.from('clients').update({
+        full_name: fullName, phone, permanent_discount_percent: discount
+      }).eq('id', clientId);
+
+      if (updErr) { alert('Помилка збереження'); return; }
+      clientModal.style.display = 'none';
+      if (onSaved) await onSaved();
     };
   }
 </script>
