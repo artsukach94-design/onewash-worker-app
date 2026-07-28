@@ -48,7 +48,11 @@
         <div id="today-quick-items"></div>
       </div>
 
-      <form id="checkin-form">
+      <div id="no-booking-message" class="empty-state" style="display:none;">
+        Мийник не створює нові записи самостійно — оберіть один із записів вище (або на "Сьогодні"), щоб підтвердити приїзд авто.
+      </div>
+
+      <form id="checkin-form" style="display:none;">
         <div class="form-row">
           <div class="form-group"><label>Номерний знак</label><input type="text" id="plate" placeholder="ТН 1234 АА" required></div>
           <div class="form-group"><label>Ім'я клієнта</label><input type="text" id="client-name" placeholder="Олена Ковальчук"></div>
@@ -244,7 +248,8 @@
 
   // Якщо в посиланні є ?booking=ID — значить, мийник прийшов сюди з екрана
   // "Сьогодні" по кнопці "Авто приїхало" для вже існуючого запису.
-  // Якщо параметра немає — це нова реєстрація авто "з вулиці" (без попереднього запису).
+  // Мийник НЕ створює нові записи самостійно — тільки підтверджує приїзд авто
+  // за вже існуючим записом (переданим параметром ?booking=... з "Сьогодні" чи зі списку нижче).
   const existingBookingId = new URLSearchParams(window.location.search).get('booking');
   let existingBooking = null;
 
@@ -252,8 +257,12 @@
     currentStaff = staff;
     await loadOptions();
     if (existingBookingId) {
+      document.getElementById('checkin-form').style.display = 'block';
+      document.getElementById('no-booking-message').style.display = 'none';
       await loadExistingBooking();
     } else {
+      document.getElementById('checkin-form').style.display = 'none';
+      document.getElementById('no-booking-message').style.display = 'block';
       await loadTodayQuickList();
     }
   });
@@ -482,6 +491,12 @@
 
   document.getElementById('checkin-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    if (!existingBookingId) {
+      alert('Мийник не може створювати нові записи самостійно. Оберіть існуючий запис.');
+      return;
+    }
+
     const submitBtn = document.getElementById('submit-btn');
     const frontFile = document.getElementById('photo-front').files[0];
 
