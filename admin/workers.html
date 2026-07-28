@@ -196,6 +196,8 @@
         const time = new Date(s.checked_in_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
         checkinLabel = `<span style="color:var(--green-600);font-weight:600;">✅ ${time}</span>`;
         distanceLabel = s.checkin_distance_meters != null ? `${s.checkin_distance_meters} м` : '—';
+      } else if (isWorking && s?.no_show_marked) {
+        checkinLabel = '<span style="color:var(--red-600);font-weight:700;">Не з\'явився на роботу</span>';
       } else if (isWorking) {
         checkinLabel = '<span style="color:var(--red-600);">Ще не прийшов</span>';
       }
