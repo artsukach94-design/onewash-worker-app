@@ -185,7 +185,7 @@
     table.innerHTML = '<tr><th>Мийник</th><th>Графік на цей день</th><th>Прийшов на роботу</th><th>Відхилення від мийки</th></tr>';
     workers.forEach(w => {
       const s = scheduleByStaff[w.id];
-      const isWorking = s ? s.is_working : true;
+      const isWorking = s ? s.is_working : false;
       const scheduleLabel = isWorking
         ? '<span style="color:var(--green-600);font-weight:600;">Робочий день</span>'
         : '<span style="color:var(--text-3);">Вихідний</span>';
