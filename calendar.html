@@ -124,7 +124,7 @@
       .eq('staff_id', currentStaff.id)
       .eq('work_date', dateStr)
       .maybeSingle();
-    const isWorkingThatDay = scheduleRow ? scheduleRow.is_working : true;
+    const isWorkingThatDay = scheduleRow ? scheduleRow.is_working : false;
 
     let query = supabase
       .from('bookings')
