@@ -145,7 +145,7 @@
       if (schedErr) throw schedErr;
 
       // якщо графік на сьогодні взагалі не заданий — вважаємо робочим днем за замовчуванням
-      const isWorkingToday = scheduleRow ? scheduleRow.is_working : true;
+      const isWorkingToday = scheduleRow ? scheduleRow.is_working : false;
 
       if (!isWorkingToday) {
         banner.style.display = 'none';
@@ -177,33 +177,43 @@
       }
 
       navigator.geolocation.getCurrentPosition(async (pos) => {
-        const { data: loc } = await supabase
-          .from('locations').select('latitude, longitude, geofence_radius_meters')
-          .eq('id', staff.location_id).single();
+        try {
+          const { data: loc, error: locErr } = await supabase
+            .from('locations').select('latitude, longitude, geofence_radius_meters')
+            .eq('id', staff.location_id).single();
 
-        if (!loc?.latitude || !loc?.longitude) {
-          alert('Для цієї мийки ще не вказано геолокацію в адмінці');
+          if (locErr) throw new Error('Помилка читання даних мийки: ' + locErr.message);
+
+          if (!loc?.latitude || !loc?.longitude) {
+            alert('Для цієї мийки ще не вказано геолокацію в адмінці');
+            btn.disabled = false; btn.textContent = 'На роботі';
+            return;
+          }
+
+          const distance = haversineDistanceMeters(pos.coords.latitude, pos.coords.longitude, loc.latitude, loc.longitude);
+          const allowedRadius = loc.geofence_radius_meters || 250;
+
+          if (distance > allowedRadius) {
+            alert(`Схоже, ви ще не на мийці (приблизно ${Math.round(distance)} м від неї). Спробуйте, коли будете на місці.`);
+            btn.disabled = false; btn.textContent = 'На роботі';
+            return;
+          }
+
+          const { error: saveErr } = await supabase.from('staff_schedule_dates').upsert({
+            staff_id: staff.id, work_date: todayStr, is_working: true,
+            checked_in_at: new Date().toISOString(), checkin_distance_meters: Math.round(distance)
+          }, { onConflict: 'staff_id,work_date' });
+
+          if (saveErr) throw new Error('Не вдалося зберегти відмітку: ' + saveErr.message);
+
+          await refreshCheckinBanner(staff);
+
+        } catch (err) {
+          alert('Помилка: ' + (err.message || String(err)));
           btn.disabled = false; btn.textContent = 'На роботі';
-          return;
         }
-
-        const distance = haversineDistanceMeters(pos.coords.latitude, pos.coords.longitude, loc.latitude, loc.longitude);
-        const allowedRadius = loc.geofence_radius_meters || 250;
-
-        if (distance > allowedRadius) {
-          alert(`Схоже, ви ще не на мийці (приблизно ${Math.round(distance)} м від неї). Спробуйте, коли будете на місці.`);
-          btn.disabled = false; btn.textContent = 'На роботі';
-          return;
-        }
-
-        await supabase.from('staff_schedule_dates').upsert({
-          staff_id: staff.id, work_date: todayStr, is_working: true,
-          checked_in_at: new Date().toISOString(), checkin_distance_meters: Math.round(distance)
-        }, { onConflict: 'staff_id,work_date' });
-
-        await refreshCheckinBanner(staff);
       }, (err) => {
-        alert('Не вдалося визначити геолокацію: ' + err.message);
+        alert('Не вдалося визначити геолокацію: ' + err.message + ' (код ' + err.code + ')');
         btn.disabled = false; btn.textContent = 'На роботі';
       }, { enableHighAccuracy: true, timeout: 15000 });
     });
@@ -282,7 +292,7 @@
       .eq('staff_id', staff.id)
       .eq('work_date', todayStr)
       .maybeSingle();
-    const isWorkingToday = scheduleRow ? scheduleRow.is_working : true;
+    const isWorkingToday = scheduleRow ? scheduleRow.is_working : false;
 
     let query = supabase
       .from('bookings')
