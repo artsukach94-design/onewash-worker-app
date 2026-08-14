@@ -285,13 +285,13 @@
       `;
       chip.querySelector('[data-toggle]').addEventListener('click', async () => {
         const { error } = await supabase.from('wash_boxes').update({ is_active: !isActive }).eq('id', b.id);
-        if (error) { console.error(error); alert('Не вдалося змінити статус боксу'); return; }
+        if (error) { console.error(error); alert('Не вдалося змінити статус боксу.\n\n' + (error.message || JSON.stringify(error))); return; }
         await loadBoxes();
       });
       chip.querySelector('[data-del]').addEventListener('click', async () => {
         if (!confirm(`Видалити бокс "${b.name}"?`)) return;
         const { error } = await supabase.from('wash_boxes').delete().eq('id', b.id);
-        if (error) { alert('Не вдалося видалити: можливо, на цей бокс уже є записи.'); console.error(error); return; }
+        if (error) { console.error(error); alert('Не вдалося видалити (можливо, на цей бокс уже є записи).\n\n' + (error.message || JSON.stringify(error))); return; }
         await loadBoxes();
       });
       box.appendChild(chip);
@@ -305,7 +305,7 @@
     const { error } = await supabase.from('wash_boxes').insert({
       location_id: currentLocationId, name, sort_order: (existing?.length || 0) + 1, is_active: true
     });
-    if (error) { console.error(error); alert('Помилка додавання'); return; }
+    if (error) { console.error(error); alert('Помилка додавання.\n\n' + (error.message || JSON.stringify(error))); return; }
     await loadBoxes();
   });
 
