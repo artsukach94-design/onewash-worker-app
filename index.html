@@ -393,11 +393,13 @@
   let completeBookingId = null;
   let completeCard = null;
   let completeVideoFile = null;
+  let completeUploadedPath = null; // set once the video is actually on the server — lets a retry skip re-uploading
 
   function openCompleteModal(bookingId, card) {
     completeBookingId = bookingId;
     completeCard = card;
     completeVideoFile = null;
+    completeUploadedPath = null;
     document.getElementById('complete-video-input').value = '';
     document.getElementById('complete-video-preview').style.display = 'none';
     document.getElementById('complete-video-error').style.display = 'none';
@@ -414,7 +416,9 @@
     const saveBtn = document.getElementById('complete-save-btn');
     errorBox.style.display = 'none';
     saveBtn.disabled = true;
+    saveBtn.textContent = 'Завершити мийку';
     completeVideoFile = null;
+    completeUploadedPath = null; // a different file was picked — any previous upload no longer applies
 
     if (!file) return;
 
@@ -433,40 +437,75 @@
     };
   });
 
+  // Мобільний інтернет у мийному боксі часто нестабільний, тож пробуємо завантажити
+  // відео кілька разів підряд, перш ніж визнати спробу невдалою.
+  async function uploadVideoWithRetry(file, path, attempts) {
+    let lastErr = null;
+    for (let i = 0; i < attempts; i++) {
+      const { error } = await supabase.storage.from('wash-videos').upload(path, file, { upsert: true });
+      if (!error) return;
+      lastErr = error;
+      console.error(`video upload attempt ${i + 1}/${attempts} failed:`, error);
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+    throw lastErr;
+  }
+
   document.getElementById('complete-save-btn').addEventListener('click', async () => {
     if (!completeVideoFile || !completeBookingId) return;
     const btn = document.getElementById('complete-save-btn');
+    const errorBox = document.getElementById('complete-video-error');
     btn.disabled = true;
-    btn.textContent = 'Завантажуємо відео...';
+    errorBox.style.display = 'none';
 
-    try {
+    // Крок 1: завантажити відео у сховище (пропускаємо, якщо попередня спроба вже його залила).
+    if (!completeUploadedPath) {
+      btn.textContent = 'Завантажуємо відео...';
       const ext = completeVideoFile.name.split('.').pop() || 'mp4';
       const path = `${completeBookingId}/final-${Date.now()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage.from('wash-videos').upload(path, completeVideoFile);
-      if (uploadErr) throw uploadErr;
+      try {
+        await uploadVideoWithRetry(completeVideoFile, path, 3);
+        completeUploadedPath = path;
+      } catch (uploadErr) {
+        errorBox.textContent = 'Не вдалося завантажити відео — схоже, слабкий інтернет у боксі. Спробуйте ще раз, файл вибирати заново не потрібно.' +
+          (uploadErr && uploadErr.message ? ` (${uploadErr.message})` : '');
+        errorBox.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Спробувати ще раз';
+        return;
+      }
+    }
 
+    // Крок 2: зберегти запис у базі — відео вже на сервері, лишається тільки записати посилання.
+    try {
+      btn.textContent = 'Зберігаємо...';
       const preview = document.getElementById('complete-video-preview');
-      await supabase.from('wash_videos').insert({
+      const { error: videoRowErr } = await supabase.from('wash_videos').insert({
         booking_id: completeBookingId,
-        storage_path: path,
-        duration_seconds: Math.round(preview.duration)
+        storage_path: completeUploadedPath,
+        duration_seconds: Math.round(preview.duration) || null,
       });
+      if (videoRowErr) throw videoRowErr;
 
-      await supabase.from('bookings').update({
+      const { error: bookingErr } = await supabase.from('bookings').update({
         status: 'done',
-        completed_at: new Date().toISOString()
+        completed_at: new Date().toISOString(),
       }).eq('id', completeBookingId);
+      if (bookingErr) throw bookingErr;
 
       completeModal.style.display = 'none';
+      completeUploadedPath = null;
       if (completeCard) {
         completeCard.classList.add('fading');
         setTimeout(() => completeCard.remove(), 300);
       }
     } catch (err) {
-      console.error(err);
-      alert('Не вдалося завершити мийку. Спробуйте ще раз.');
+      console.error('failed to save completed wash:', err);
+      errorBox.textContent = 'Відео вже завантажено, але не вдалося зберегти запис' +
+        (err && err.message ? ` (${err.message})` : '') + '. Натисніть "Спробувати ще раз".';
+      errorBox.style.display = 'block';
       btn.disabled = false;
-      btn.textContent = 'Завершити мийку';
+      btn.textContent = 'Спробувати ще раз';
     }
   });
 </script>
