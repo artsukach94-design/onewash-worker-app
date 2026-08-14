@@ -438,12 +438,18 @@
   });
 
   // Мобільний інтернет у мийному боксі часто нестабільний, тож пробуємо завантажити
-  // відео кілька разів підряд, перш ніж визнати спробу невдалою.
-  async function uploadVideoWithRetry(file, path, attempts) {
+  // відео кілька разів підряд, перш ніж визнати спробу невдалою. Кожна спроба пише у
+  // СВІЙ унікальний шлях (а не перезаписує попередній) — так це завжди звичайний
+  // INSERT, дозволений політикою RLS; для wash-videos немає UPDATE-політики, тож
+  // upsert/перезапис того самого шляху завжди впав би, якщо попередня спроба
+  // насправді долетіла до сервера, а відповідь до телефона — ні.
+  async function uploadVideoWithRetry(file, bookingId, attempts) {
+    const ext = file.name.split('.').pop() || 'mp4';
     let lastErr = null;
     for (let i = 0; i < attempts; i++) {
-      const { error } = await supabase.storage.from('wash-videos').upload(path, file, { upsert: true });
-      if (!error) return;
+      const path = `${bookingId}/final-${Date.now()}-${i}.${ext}`;
+      const { error } = await supabase.storage.from('wash-videos').upload(path, file);
+      if (!error) return path;
       lastErr = error;
       console.error(`video upload attempt ${i + 1}/${attempts} failed:`, error);
       if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
@@ -461,11 +467,8 @@
     // Крок 1: завантажити відео у сховище (пропускаємо, якщо попередня спроба вже його залила).
     if (!completeUploadedPath) {
       btn.textContent = 'Завантажуємо відео...';
-      const ext = completeVideoFile.name.split('.').pop() || 'mp4';
-      const path = `${completeBookingId}/final-${Date.now()}.${ext}`;
       try {
-        await uploadVideoWithRetry(completeVideoFile, path, 3);
-        completeUploadedPath = path;
+        completeUploadedPath = await uploadVideoWithRetry(completeVideoFile, completeBookingId, 3);
       } catch (uploadErr) {
         errorBox.textContent = 'Не вдалося завантажити відео — схоже, слабкий інтернет у боксі. Спробуйте ще раз, файл вибирати заново не потрібно.' +
           (uploadErr && uploadErr.message ? ` (${uploadErr.message})` : '');
