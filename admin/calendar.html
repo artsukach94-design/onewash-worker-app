@@ -307,9 +307,10 @@
       staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
     document.getElementById('m-vtype').innerHTML = vehicleTypes.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
     document.getElementById('m-washtype').innerHTML = washTypes.map(w => `<option value="${w.id}" data-name="${w.name}">${w.name}</option>`).join('');
-    document.getElementById('m-box').innerHTML = boxList.length
-      ? boxList.map(b => `<option value="${b.id}">${b.name}</option>`).join('')
-      : '<option value="">Боксів не додано</option>';
+    const activeBoxes = boxList.filter(b => b.is_active !== false);
+    document.getElementById('m-box').innerHTML = activeBoxes.length
+      ? activeBoxes.map(b => `<option value="${b.id}">${b.name}</option>`).join('')
+      : '<option value="">Немає увімкнених боксів</option>';
     initBrandModelSelects('m');
 
     const extrasBox = document.getElementById('m-extras-box');

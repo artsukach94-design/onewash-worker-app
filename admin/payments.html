@@ -223,7 +223,7 @@
     document.getElementById('l-staff').innerHTML = '<option value="">Не призначено</option>' +
       staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
     document.getElementById('l-box').innerHTML = '<option value="">Не вказано</option>' +
-      boxList.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+      boxList.filter(b => b.is_active !== false).map(b => `<option value="${b.id}">${b.name}</option>`).join('');
     document.getElementById('l-washtype').innerHTML =
       washTypes.map(w => `<option value="${w.id}" data-name="${w.name}">${w.name}</option>`).join('');
     document.getElementById('l-vtype').innerHTML =

@@ -66,7 +66,10 @@
 
         <div class="panel">
           <div class="panel-head"><h3>Мийні бокси</h3><button class="btn btn-sm" id="add-box">+ Додати бокс</button></div>
-          <div class="panel-body" id="box-list" style="display:flex;gap:8px;flex-wrap:wrap;">Завантаження...</div>
+          <div class="panel-body">
+            <p style="font-size:12px;color:var(--text-2);margin:0 0 12px;">Перемикач — тимчасово вимкнути запис у бокс (наприклад, на ремонт), без видалення. Вимкнений бокс зникає з вибору при створенні запису, але лишається в історії старих записів.</p>
+            <div id="box-list" style="display:flex;gap:8px;flex-wrap:wrap;">Завантаження...</div>
+          </div>
         </div>
 
         <div class="panel">
@@ -272,10 +275,20 @@
       return;
     }
     boxes.forEach(b => {
+      const isActive = b.is_active !== false;
       const chip = document.createElement('span');
-      chip.style.cssText = 'display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:20px;padding:6px 8px 6px 12px;font-size:12.5px;';
-      chip.innerHTML = `${b.name} <span style="cursor:pointer;color:var(--red-600);font-weight:600;" title="Видалити">×</span>`;
-      chip.querySelector('span').addEventListener('click', async () => {
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:20px;padding:6px 8px 6px 12px;font-size:12.5px;' + (isActive ? '' : 'opacity:.55;');
+      chip.innerHTML = `
+        <span>${b.name}${isActive ? '' : ' <span style="color:var(--text-3);">(вимкнено)</span>'}</span>
+        <span class="toggle ${isActive ? 'on' : ''}" data-toggle title="${isActive ? 'Вимкнути запис у цей бокс' : 'Увімкнути запис у цей бокс'}" style="transform:scale(.72);"></span>
+        <span style="cursor:pointer;color:var(--red-600);font-weight:600;" data-del title="Видалити">×</span>
+      `;
+      chip.querySelector('[data-toggle]').addEventListener('click', async () => {
+        const { error } = await supabase.from('wash_boxes').update({ is_active: !isActive }).eq('id', b.id);
+        if (error) { console.error(error); alert('Не вдалося змінити статус боксу'); return; }
+        await loadBoxes();
+      });
+      chip.querySelector('[data-del]').addEventListener('click', async () => {
         if (!confirm(`Видалити бокс "${b.name}"?`)) return;
         const { error } = await supabase.from('wash_boxes').delete().eq('id', b.id);
         if (error) { alert('Не вдалося видалити: можливо, на цей бокс уже є записи.'); console.error(error); return; }
@@ -290,7 +303,7 @@
     if (!name) return;
     const { data: existing } = await supabase.from('wash_boxes').select('id').eq('location_id', currentLocationId);
     const { error } = await supabase.from('wash_boxes').insert({
-      location_id: currentLocationId, name, sort_order: (existing?.length || 0) + 1
+      location_id: currentLocationId, name, sort_order: (existing?.length || 0) + 1, is_active: true
     });
     if (error) { console.error(error); alert('Помилка додавання'); return; }
     await loadBoxes();
