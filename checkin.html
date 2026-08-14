@@ -49,7 +49,7 @@
       </div>
 
       <div id="no-booking-message" class="empty-state" style="display:none;">
-        Мийник не створює нові записи самостійно — оберіть один із записів вище (або на "Сьогодні"), щоб підтвердити приїзд авто.
+        На сьогодні немає активних записів — заповніть форму нижче, щоб зареєструвати авто самостійно.
       </div>
 
       <form id="checkin-form" style="display:none;">
@@ -247,31 +247,36 @@
   }
 
   // Якщо в посиланні є ?booking=ID — значить, мийник прийшов сюди з екрана
-  // "Сьогодні" по кнопці "Авто приїхало" для вже існуючого запису.
-  // Мийник НЕ створює нові записи самостійно — тільки підтверджує приїзд авто
-  // за вже існуючим записом (переданим параметром ?booking=... з "Сьогодні" чи зі списку нижче).
+  // "Сьогодні" (або зі списку нижче) підтвердити приїзд авто за вже існуючим записом.
+  // Якщо параметра немає — мийник реєструє нове авто самостійно (РЕЖИМ 2 нижче);
+  // редагувати чужий існуючий запис без цього параметра неможливо.
   const existingBookingId = new URLSearchParams(window.location.search).get('booking');
   let existingBooking = null;
 
   initPage(async (staff) => {
     currentStaff = staff;
     await loadOptions();
+    document.getElementById('checkin-form').style.display = 'block';
     if (existingBookingId) {
-      document.getElementById('checkin-form').style.display = 'block';
-      document.getElementById('no-booking-message').style.display = 'none';
       await loadExistingBooking();
     } else {
-      document.getElementById('checkin-form').style.display = 'none';
-      document.getElementById('no-booking-message').style.display = 'block';
-      await loadTodayQuickList();
+      // Немає прив'язаного запису — мийник реєструє авто "з вулиці" (РЕЖИМ 2 нижче).
+      // Список записів на сьогодні все одно показуємо зверху: якщо адмін насправді
+      // вже створив запис на це авто, простіше підтвердити приїзд за ним, ніж дублювати.
+      document.getElementById('page-h').textContent = 'Новий запис';
+      document.getElementById('page-sub').textContent = 'Немає запису на це авто? Заповніть форму нижче самостійно';
+      document.getElementById('submit-btn').textContent = 'Зареєструвати та почати мийку';
     }
+    await loadTodayQuickList();
   });
 
-  // Показує міні-список записів на сьогодні зверху форми (якщо це не режим
-  // редагування конкретного запису) — клік одразу підтягує всі дані цього запису
+  // Показує міні-список записів на сьогодні зверху форми — клік одразу підтягує
+  // всі дані цього запису (щоб підтвердити приїзд, а не створювати дублікат).
+  // Якщо на сьогодні нічого немає — показуємо підказку, що можна зареєструвати самостійно.
   async function loadTodayQuickList() {
     const box = document.getElementById('today-quick-list');
     const items = document.getElementById('today-quick-items');
+    const noBookingMsg = document.getElementById('no-booking-message');
 
     const start = new Date(); start.setHours(0, 0, 0, 0);
     const end = new Date(); end.setHours(23, 59, 59, 999);
@@ -287,6 +292,7 @@
 
     if (error || !bookings || bookings.length === 0) {
       box.style.display = 'none';
+      if (!existingBookingId) noBookingMsg.style.display = 'block';
       return;
     }
 
@@ -491,11 +497,6 @@
 
   document.getElementById('checkin-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-
-    if (!existingBookingId) {
-      alert('Мийник не може створювати нові записи самостійно. Оберіть існуючий запис.');
-      return;
-    }
 
     const submitBtn = document.getElementById('submit-btn');
     const frontFile = document.getElementById('photo-front').files[0];
