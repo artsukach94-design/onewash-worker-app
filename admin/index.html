@@ -64,6 +64,14 @@
       </div>
       <div class="content" id="page-content">
 
+        <div id="push-banner" class="push" style="display:none;align-items:center;justify-content:space-between;">
+          <div style="display:flex;gap:10px;align-items:flex-start;">
+            <div class="ic">🔔</div>
+            <div><b id="push-banner-title">Увімкнути сповіщення</b><br><span id="push-banner-sub">Про нові записи через сайт та інші події</span></div>
+          </div>
+          <button class="btn btn-sm" id="push-toggle-btn" style="background:var(--cyan-500);border-color:var(--cyan-500);color:#04202F;font-weight:600;white-space:nowrap;">Увімкнути</button>
+        </div>
+
         <div class="stat-grid">
           <div class="stat-card"><div class="label">Записів сьогодні</div><div class="value" id="stat-total">—</div></div>
           <div class="stat-card"><div class="label">Виконано</div><div class="value" id="stat-done">—</div></div>
@@ -118,10 +126,15 @@
 </div>
 
 <script type="module">
-  import { supabase, initAdminPage, wireLoginForm, logout, formatTime, subscribeToTable } from './app.js';
+  import {
+    supabase, initAdminPage, wireLoginForm, logout, formatTime, subscribeToTable,
+    getPushSubscriptionStatus, enablePushNotifications, disablePushNotifications, isIos, isStandaloneApp,
+  } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentAdminForPush = null;
 
   initAdminPage(async (admin, locations, locationId) => {
     if (admin.is_superadmin) {
@@ -129,11 +142,62 @@
     }
     document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
 
+    currentAdminForPush = admin;
+    await refreshPushBanner();
     await loadDashboard(locationId);
 
     subscribeToTable('dashboard-' + locationId, 'bookings', `location_id=eq.${locationId}`, () => {
       loadDashboard(locationId);
     });
+  });
+
+  // ==== PUSH-СПОВІЩЕННЯ ====
+  async function refreshPushBanner() {
+    const banner = document.getElementById('push-banner');
+    const title = document.getElementById('push-banner-title');
+    const sub = document.getElementById('push-banner-sub');
+    const btn = document.getElementById('push-toggle-btn');
+
+    const status = await getPushSubscriptionStatus();
+    if (status === 'unsupported') { banner.style.display = 'none'; return; }
+
+    banner.style.display = 'flex';
+
+    if (status === 'subscribed') {
+      title.textContent = 'Сповіщення увімкнено';
+      sub.textContent = 'Ви отримуватимете сповіщення про нові записи через сайт';
+      btn.textContent = 'Вимкнути';
+    } else if (isIos() && !isStandaloneApp()) {
+      title.textContent = 'Увімкнути сповіщення';
+      sub.textContent = 'Спочатку додайте застосунок на головний екран (Поділитися → На головний екран)';
+      btn.textContent = 'Увімкнути';
+    } else {
+      title.textContent = 'Увімкнути сповіщення';
+      sub.textContent = 'Про нові записи через сайт та інші події';
+      btn.textContent = 'Увімкнути';
+    }
+  }
+
+  document.getElementById('push-toggle-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('push-toggle-btn');
+    const status = await getPushSubscriptionStatus();
+
+    if (status === 'subscribed') {
+      await disablePushNotifications();
+      await refreshPushBanner();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Зачекайте...';
+    try {
+      await enablePushNotifications(currentAdminForPush.id);
+      await refreshPushBanner();
+    } catch (err) {
+      alert(err.message || 'Не вдалося увімкнути сповіщення');
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   async function loadDashboard(locationId) {
