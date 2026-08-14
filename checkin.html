@@ -58,6 +58,7 @@
           <div class="form-group"><label>Ім'я клієнта</label><input type="text" id="client-name" placeholder="Олена Ковальчук"></div>
         </div>
         <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="phone" placeholder="+380671112233" required></div>
+        <div class="form-group" id="client-found" style="display:none;background:var(--cyan-100);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:var(--cyan-600);"></div>
         <div class="form-group" id="discount-info" style="display:none;background:var(--green-100);border-radius:8px;padding:9px 12px;margin-bottom:6px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--green-600);">
             <input type="checkbox" id="apply-discount" checked style="width:16px;height:16px;">
@@ -460,10 +461,20 @@
   async function lookupClientDiscount() {
     const phone = document.getElementById('phone').value.trim();
     const infoBox = document.getElementById('discount-info');
-    if (!phone) { currentClientDiscount = 0; infoBox.style.display = 'none'; updateTotal(); return; }
+    const foundBox = document.getElementById('client-found');
+    if (!phone) {
+      currentClientDiscount = 0;
+      infoBox.style.display = 'none';
+      foundBox.style.display = 'none';
+      updateTotal();
+      return;
+    }
 
+    // Режим "авто приїхало за записом" уже підтягнув саме те авто, що прив'язане до цього
+    // запису (loadExistingBooking) — тут шукати за телефоном і підміняти його не треба.
+    const select = existingBooking ? 'permanent_discount_percent' : '*, cars(*)';
     const { data: client } = await supabase
-      .from('clients').select('permanent_discount_percent')
+      .from('clients').select(select)
       .eq('phone', phone).eq('location_id', currentStaff.location_id).maybeSingle();
 
     currentClientDiscount = client?.permanent_discount_percent || 0;
@@ -474,6 +485,30 @@
     } else {
       infoBox.style.display = 'none';
     }
+
+    if (!existingBooking) {
+      if (client) {
+        const nameField = document.getElementById('client-name');
+        if (client.full_name && !nameField.value.trim()) nameField.value = client.full_name;
+
+        if (client.cars && client.cars.length > 0) {
+          const car = client.cars[client.cars.length - 1]; // останнє додане авто
+          const plateField = document.getElementById('plate');
+          if (!plateField.value.trim()) plateField.value = car.plate || '';
+          setBrandModelFromString(car.brand_model || '');
+          const colorField = document.getElementById('color');
+          if (car.color && !colorField.value.trim()) colorField.value = car.color;
+          if (car.vehicle_type_id) selectChipById('vtype-box', car.vehicle_type_id);
+          foundBox.textContent = `✅ Знайдено клієнта${client.full_name ? ': ' + client.full_name : ''} · авто підтягнуто (${client.cars.length} шт. на акаунті, показано останнє) — перевірте номер і змініть за потреби.`;
+        } else {
+          foundBox.textContent = `✅ Знайдено клієнта${client.full_name ? ': ' + client.full_name : ''}, авто ще не зареєстровано.`;
+        }
+        foundBox.style.display = 'block';
+      } else {
+        foundBox.style.display = 'none';
+      }
+    }
+
     document.getElementById('total-price').dataset.dirty = 'false';
     updateTotal();
   }
@@ -573,12 +608,30 @@
           clientId = newClient.id;
         }
 
-        const { data: car, error: carErr } = await supabase
-          .from('cars').insert({
-            client_id: clientId, plate, brand_model: brandModel, color,
-            vehicle_type_id: vehicleTypeId
-          }).select().single();
-        if (carErr) throw carErr;
+        // Не дублюємо авто — якщо в цього клієнта вже є авто з таким номером
+        // (звірка без урахування регістру/пробілів), оновлюємо його, а не створюємо нове.
+        let car = null;
+        if (plate) {
+          const normalizedPlate = plate.replace(/\s+/g, '').toUpperCase();
+          const { data: clientCars } = await supabase.from('cars').select('id, plate').eq('client_id', clientId);
+          const existingCar = (clientCars || []).find(c => c.plate && c.plate.replace(/\s+/g, '').toUpperCase() === normalizedPlate);
+          if (existingCar) {
+            const { data: updatedCar, error: updErr } = await supabase
+              .from('cars').update({ brand_model: brandModel, color, vehicle_type_id: vehicleTypeId })
+              .eq('id', existingCar.id).select().single();
+            if (updErr) throw updErr;
+            car = updatedCar;
+          }
+        }
+        if (!car) {
+          const { data: newCar, error: carErr } = await supabase
+            .from('cars').insert({
+              client_id: clientId, plate, brand_model: brandModel, color,
+              vehicle_type_id: vehicleTypeId
+            }).select().single();
+          if (carErr) throw carErr;
+          car = newCar;
+        }
 
         const { data: booking, error: bookingErr } = await supabase
           .from('bookings').insert({

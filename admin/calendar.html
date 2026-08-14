@@ -135,6 +135,7 @@
     </div>
 
     <div class="form-group"><label>Телефон клієнта</label><input type="tel" id="m-phone" placeholder="+380671112233"></div>
+    <div id="m-client-found" style="display:none;background:var(--cyan-100);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--cyan-600);"></div>
     <div id="m-discount-info" style="display:none;background:var(--green-100);border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:var(--green-600);">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
         <input type="checkbox" id="m-apply-discount" checked style="width:16px;height:16px;">
@@ -160,9 +161,18 @@
       </div>
     </div>
 
-    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;">
-      <input type="checkbox" id="m-prepaid" style="width:17px;height:17px;"> Оплачено повністю (інакше — статус "Не оплачено", можна змінити пізніше)
-    </label>
+    <div class="form-group" style="margin-top:14px;">
+      <label>Оплата</label>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><input type="radio" name="m-pay-mode" id="m-pay-none" checked> Не оплачено</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><input type="radio" name="m-pay-mode" id="m-pay-partial"> Передоплата</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><input type="radio" name="m-pay-mode" id="m-pay-full"> Оплачено повністю</label>
+      </div>
+      <div class="form-group" id="m-pay-amount-wrap" style="display:none;margin-bottom:0;">
+        <label>Сума передоплати, грн</label>
+        <input type="text" id="m-pay-amount" value="200">
+      </div>
+    </div>
 
     <div style="display:flex;gap:8px;margin-top:16px;">
       <button class="btn" style="flex:1;" id="m-cancel">Скасувати</button>
@@ -255,6 +265,40 @@
     modelSelect.addEventListener('change', () => {
       modelOtherWrap.style.display = modelSelect.value === '__other__' ? 'block' : 'none';
     });
+  }
+
+  // Reverse of getBrandModelValue — splits a stored "Марка Модель" string back into the
+  // brand/model selects, so a returning client's car can be prefilled instead of retyped.
+  function setBrandModelFromString(prefix, fullText) {
+    const brandSelect = document.getElementById(prefix + '-brand-select');
+    const brandOtherWrap = document.getElementById(prefix + '-brand-other-wrap');
+    const modelSelect = document.getElementById(prefix + '-model-select');
+    const modelOtherWrap = document.getElementById(prefix + '-model-other-wrap');
+    if (!fullText) return;
+
+    const brands = Object.keys(CAR_BRANDS).sort((a, b) => b.length - a.length);
+    const match = brands.find(b => fullText === b || fullText.startsWith(b + ' '));
+
+    if (match) {
+      brandSelect.value = match;
+      brandOtherWrap.style.display = 'none';
+      const models = CAR_BRANDS[match] || [];
+      modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('') + '<option value="__other__">Інша модель…</option>';
+      modelOtherWrap.style.display = 'none';
+      const model = fullText.slice(match.length).trim();
+      const hasModel = [...modelSelect.options].some(o => o.value === model);
+      if (model && hasModel) {
+        modelSelect.value = model;
+      } else if (model) {
+        modelSelect.value = '__other__';
+        modelOtherWrap.style.display = 'block';
+        document.getElementById(prefix + '-model-other').value = model;
+      }
+    } else {
+      brandSelect.value = '__other__';
+      brandOtherWrap.style.display = 'block';
+      document.getElementById(prefix + '-brand-other').value = fullText;
+    }
   }
 
   function getBrandModelValue(prefix) {
@@ -390,10 +434,19 @@
   async function lookupClientDiscount() {
     const phone = document.getElementById('m-phone').value.trim();
     const infoBox = document.getElementById('m-discount-info');
-    if (!phone) { currentClientDiscount = 0; infoBox.style.display = 'none'; recomputeTotal(); return; }
+    const foundBox = document.getElementById('m-client-found');
+    if (!phone) {
+      currentClientDiscount = 0;
+      infoBox.style.display = 'none';
+      foundBox.style.display = 'none';
+      recomputeTotal();
+      return;
+    }
 
+    // *, cars(*) — same phone-lookup pattern as "Посилання на оплату", so a returning
+    // client's car gets prefilled instead of retyped (and duplicated) here too.
     const { data: client } = await supabase
-      .from('clients').select('permanent_discount_percent')
+      .from('clients').select('*, cars(*)')
       .eq('phone', phone).eq('location_id', currentLocationId).maybeSingle();
 
     currentClientDiscount = client?.permanent_discount_percent || 0;
@@ -404,6 +457,25 @@
     } else {
       infoBox.style.display = 'none';
     }
+
+    if (client) {
+      const nameField = document.getElementById('m-client-name');
+      if (client.full_name && !nameField.value.trim()) nameField.value = client.full_name;
+
+      if (client.cars && client.cars.length > 0) {
+        const car = client.cars[client.cars.length - 1]; // останнє додане авто
+        document.getElementById('m-plate').value = car.plate || '';
+        setBrandModelFromString('m', car.brand_model || '');
+        if (car.vehicle_type_id) document.getElementById('m-vtype').value = car.vehicle_type_id;
+        foundBox.textContent = `✅ Знайдено клієнта${client.full_name ? ': ' + client.full_name : ''} · авто підтягнуто (${client.cars.length} шт. на акаунті, показано останнє)`;
+      } else {
+        foundBox.textContent = `✅ Знайдено клієнта${client.full_name ? ': ' + client.full_name : ''}, авто ще не зареєстровано`;
+      }
+      foundBox.style.display = 'block';
+    } else {
+      foundBox.style.display = 'none';
+    }
+
     document.getElementById('m-total-price').dataset.dirty = 'false';
     recomputeTotal();
   }
@@ -594,13 +666,14 @@
       const washLabel = b.wash_types?.name || '';
       const boxLabel = b.wash_boxes?.name ? ' · ' + b.wash_boxes.name : '';
       const endLabel = b.scheduled_end ? ` (до ${new Date(b.scheduled_end).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })})` : '';
+      const sourceLabel = { site: 'сайт', manual: 'вручну', call: 'дзвінок', admin: 'адмін' }[b.source] || b.source;
 
       const row = document.createElement('div');
       row.className = 'sched-row';
       const canCancel = !['cancelled', 'done', 'no_show'].includes(b.status);
       row.innerHTML = `
         <div class="sched-time">${formatTime(b.scheduled_at)}${endLabel}</div>
-        <div class="sched-info"><b>${carLabel}</b><span>${clientLabel} · ${washLabel} · ${staffLabel}${boxLabel}</span></div>
+        <div class="sched-info"><b>${carLabel}</b><span>${clientLabel} · ${washLabel} · ${staffLabel}${boxLabel} · ${sourceLabel}</span></div>
         ${renderPayBadge(b)}
         <span class="pill ${pillClasses[b.status] || ''}">${statusLabels[b.status] || b.status}</span>
         ${canCancel ? `<button class="btn btn-sm cancel-btn" data-id="${b.id}" style="margin-left:8px;color:var(--red-600);">Скасувати</button>` : ''}
@@ -701,6 +774,12 @@
   document.getElementById('m-cancel').addEventListener('click', () => modal.style.display = 'none');
   document.getElementById('m-close-x').addEventListener('click', () => modal.style.display = 'none');
 
+  ['m-pay-none', 'm-pay-partial', 'm-pay-full'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      document.getElementById('m-pay-amount-wrap').style.display = document.getElementById('m-pay-partial').checked ? 'block' : 'none';
+    });
+  });
+
   document.getElementById('m-save').addEventListener('click', async () => {
     const staffId = document.getElementById('m-staff').value || null;
     const boxId = document.getElementById('m-box').value || null;
@@ -710,13 +789,22 @@
     const plate = document.getElementById('m-plate').value.trim();
     const brand = getBrandModelValue('m');
     const vtypeId = document.getElementById('m-vtype').value;
-    const isPrepaid = document.getElementById('m-prepaid').checked;
+
+    const payMode = document.getElementById('m-pay-full').checked ? 'paid'
+      : document.getElementById('m-pay-partial').checked ? 'partial'
+      : 'not_paid';
+    const totalForValidation = parseFloat(document.getElementById('m-total-price').value) || 0;
+    const partialAmount = parseFloat(document.getElementById('m-pay-amount').value) || 0;
 
     const selectedOption = document.getElementById('m-washtype').options[document.getElementById('m-washtype').selectedIndex];
     const isChemical = selectedOption && selectedOption.dataset.name === 'Хімчистка';
 
     if (!phone) {
       alert('Заповніть принаймні телефон клієнта');
+      return;
+    }
+    if (payMode === 'partial' && (partialAmount <= 0 || partialAmount > totalForValidation)) {
+      alert('Сума передоплати має бути більшою за 0 і не перевищувати повну вартість');
       return;
     }
 
@@ -772,12 +860,28 @@
         clientId = newClient.id;
       }
 
+      // Не дублюємо авто — якщо в цього клієнта вже є авто з таким номером
+      // (звірка без урахування регістру/пробілів), оновлюємо його, а не створюємо нове.
       let carId = null;
       if (plate || brand) {
-        const { data: car, error: carErr } = await supabase
-          .from('cars').insert({ client_id: clientId, plate, brand_model: brand, vehicle_type_id: vtypeId }).select().single();
-        if (carErr) throw carErr;
-        carId = car.id;
+        let existingCar = null;
+        if (plate) {
+          const normalizedPlate = plate.replace(/\s+/g, '').toUpperCase();
+          const { data: clientCars } = await supabase.from('cars').select('id, plate').eq('client_id', clientId);
+          existingCar = (clientCars || []).find(c => c.plate && c.plate.replace(/\s+/g, '').toUpperCase() === normalizedPlate) || null;
+        }
+
+        if (existingCar) {
+          carId = existingCar.id;
+          const { error: carErr } = await supabase
+            .from('cars').update({ brand_model: brand, vehicle_type_id: vtypeId }).eq('id', carId);
+          if (carErr) throw carErr;
+        } else {
+          const { data: car, error: carErr } = await supabase
+            .from('cars').insert({ client_id: clientId, plate, brand_model: brand, vehicle_type_id: vtypeId }).select().single();
+          if (carErr) throw carErr;
+          carId = car.id;
+        }
       }
 
       // ціна — те значення, що зараз у полі "Вартість" (авто-розраховане або вручну змінене адміном)
@@ -796,8 +900,8 @@
         status: 'confirmed',
         source: 'admin',
         total_price: total,
-        payment_status: isPrepaid ? 'paid' : 'not_paid',
-        paid_amount: isPrepaid ? total : 0
+        payment_status: payMode,
+        paid_amount: payMode === 'paid' ? total : payMode === 'partial' ? partialAmount : 0
       }).select().single();
       if (bErr) throw bErr;
 
@@ -813,9 +917,12 @@
       });
       document.getElementById('m-brand-other-wrap').style.display = 'none';
       document.getElementById('m-model-other-wrap').style.display = 'none';
-      document.getElementById('m-prepaid').checked = false;
+      document.getElementById('m-pay-none').checked = true;
+      document.getElementById('m-pay-amount-wrap').style.display = 'none';
+      document.getElementById('m-pay-amount').value = '200';
       document.getElementById('m-total-price').dataset.dirty = 'false';
       document.getElementById('m-discount-info').style.display = 'none';
+      document.getElementById('m-client-found').style.display = 'none';
       currentClientDiscount = 0;
       modalSelectedSlotISO = null;
       await loadDay();
