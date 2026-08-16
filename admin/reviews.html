@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mage Wash — Відгуки</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mage Wash Admin">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>Mage Wash</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <img src="icon-192.png" class="brand-mark" style="object-fit:cover;">
+        <div class="brand-text"><b>Mage Wash</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+        <a class="nav-item" href="payments.html">Посилання на оплату</a>
+        <a class="nav-item active" href="reviews.html">Відгуки</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Відгуки</h1><div class="sub">Оцінки й коментарі клієнтів про цю мийку</div></div>
+      </div>
+      <div class="content" id="page-content">
+
+        <div class="stat-grid">
+          <div class="stat-card"><div class="label">Рейтинг на картці мийки</div><div class="value" id="stat-rating-display">—</div></div>
+          <div class="stat-card"><div class="label">Реальний середній (оновлюється щоразу)</div><div class="value" id="stat-rating-avg">—</div></div>
+          <div class="stat-card"><div class="label">Усього відгуків</div><div class="value" id="stat-count">—</div></div>
+          <div class="stat-card"><div class="label">Середня оцінка вибірки нижче</div><div class="value" id="stat-visible-count">—</div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Усі відгуки</h3></div>
+          <div class="panel-body" id="reviews-list" style="padding:0;">Завантаження...</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ЛАЙТБОКС ФОТО -->
+<div id="photo-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.85);align-items:center;justify-content:center;z-index:40;cursor:zoom-out;">
+  <img id="photo-modal-img" style="max-width:90vw;max-height:90vh;border-radius:8px;">
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let isSuperadmin = false;
+  let currentLocationId = null;
+
+  initAdminPage(async (admin, locations, locationId) => {
+    isSuperadmin = admin.is_superadmin;
+    if (isSuperadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+
+    currentLocationId = locationId;
+    await loadLocationStats();
+    await loadReviews();
+  });
+
+  async function loadLocationStats() {
+    const { data, error } = await supabase
+      .from('locations')
+      .select('rating_display, rating_avg, reviews_count')
+      .eq('id', currentLocationId)
+      .single();
+    if (error) { console.error(error); return; }
+    document.getElementById('stat-rating-display').textContent = data.rating_display != null ? Number(data.rating_display).toFixed(1) : '—';
+    document.getElementById('stat-rating-avg').textContent = data.rating_avg != null ? Number(data.rating_avg).toFixed(1) : '—';
+    document.getElementById('stat-count').textContent = data.reviews_count ?? 0;
+  }
+
+  const STATUS_LABELS = { active: 'Активний', cancelled: 'Скасовано суперадміном' };
+
+  async function loadReviews() {
+    const list = document.getElementById('reviews-list');
+    list.innerHTML = '<div class="empty-state">Завантаження...</div>';
+
+    const { data: reviews, error } = await supabase
+      .from('reviews')
+      .select(`
+        id, rating, comment, photo_urls, status, created_at,
+        platform_clients(full_name, phone),
+        staff(full_name),
+        bookings(scheduled_at, total_price, wash_types(name), cars(brand_model, plate))
+      `)
+      .eq('location_id', currentLocationId)
+      .order('created_at', { ascending: false });
+
+    if (error) { console.error(error); list.innerHTML = '<div class="empty-state">Помилка завантаження</div>'; return; }
+
+    document.getElementById('stat-visible-count').textContent = reviews.length;
+
+    if (reviews.length === 0) {
+      list.innerHTML = '<div class="empty-state">Відгуків про цю мийку ще немає</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    reviews.forEach(r => list.appendChild(renderReviewCard(r)));
+  }
+
+  function renderReviewCard(r) {
+    const card = document.createElement('div');
+    card.style.cssText = 'padding:16px 18px;border-bottom:1px solid var(--border);';
+    if (r.status === 'cancelled') card.style.opacity = '0.55';
+
+    const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+    const date = new Date(r.created_at).toLocaleString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    const clientName = r.platform_clients?.full_name || 'Без імені';
+    const clientPhone = r.platform_clients?.phone || '—';
+
+    const b = r.bookings;
+    const serviceParts = [];
+    if (b?.scheduled_at) serviceParts.push(new Date(b.scheduled_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' }));
+    if (b?.wash_types?.name) serviceParts.push(b.wash_types.name);
+    if (b?.cars) serviceParts.push(`${b.cars.brand_model || 'Авто'} · ${b.cars.plate || '—'}`);
+    if (b?.total_price) serviceParts.push(`${Number(b.total_price).toLocaleString('uk-UA')} грн`);
+    const serviceLine = serviceParts.length > 0 ? serviceParts.join(' · ') : 'Дані про запис недоступні';
+
+    const photosHtml = (r.photo_urls || []).map(url => `
+      <img src="${url}" class="review-photo" data-url="${url}"
+        style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:pointer;margin:0 6px 6px 0;">
+    `).join('');
+
+    const modBtns = isSuperadmin ? `
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-sm toggle-status-btn" data-id="${r.id}" data-status="${r.status}">
+          ${r.status === 'cancelled' ? 'Відновити відгук' : 'Скасувати відгук'}
+        </button>
+        <button class="btn btn-sm delete-review-btn" data-id="${r.id}" style="color:var(--red-600);border-color:var(--red-100);">Видалити назавжди</button>
+      </div>
+    ` : '';
+
+    card.innerHTML = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div style="min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="color:var(--amber-600);font-size:15px;letter-spacing:1px;">${stars}</span>
+            <b style="font-size:13.5px;">${clientName}</b>
+            <span style="font-size:12px;color:var(--text-2);">${clientPhone}</span>
+            ${r.status === 'cancelled' ? `<span class="pay-badge unpaid">${STATUS_LABELS[r.status]}</span>` : ''}
+          </div>
+          <div style="font-size:12px;color:var(--text-2);margin-top:3px;">
+            ${serviceLine}${b?.wash_types || r.staff?.full_name ? ' · мийник: ' + (r.staff?.full_name || 'не вказано') : ''}
+          </div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px;">${date}</div>
+        </div>
+      </div>
+      ${r.comment ? `<div style="font-size:13px;margin-top:10px;line-height:1.5;">${escapeHtml(r.comment)}</div>` : ''}
+      ${photosHtml ? `<div style="margin-top:10px;">${photosHtml}</div>` : ''}
+      ${modBtns}
+    `;
+
+    card.querySelectorAll('.review-photo').forEach(img => {
+      img.addEventListener('click', () => openPhotoModal(img.dataset.url));
+    });
+
+    const toggleBtn = card.querySelector('.toggle-status-btn');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', async () => {
+        const newStatus = toggleBtn.dataset.status === 'cancelled' ? 'active' : 'cancelled';
+        const confirmMsg = newStatus === 'cancelled'
+          ? 'Скасувати цей відгук? Він перестане враховуватись у рейтингу мийки, але залишиться в базі.'
+          : 'Відновити цей відгук і знову врахувати його в рейтингу?';
+        if (!confirm(confirmMsg)) return;
+        const { error: updErr } = await supabase.from('reviews').update({ status: newStatus }).eq('id', toggleBtn.dataset.id);
+        if (updErr) { console.error(updErr); alert('Помилка: ' + updErr.message); return; }
+        await loadLocationStats();
+        await loadReviews();
+      });
+    }
+
+    const delBtn = card.querySelector('.delete-review-btn');
+    if (delBtn) {
+      delBtn.addEventListener('click', async () => {
+        if (!confirm('Видалити цей відгук НАЗАВЖДИ? Цю дію не можна скасувати.')) return;
+        const { error: delErr } = await supabase.from('reviews').delete().eq('id', delBtn.dataset.id);
+        if (delErr) { console.error(delErr); alert('Помилка: ' + delErr.message); return; }
+        await loadLocationStats();
+        await loadReviews();
+      });
+    }
+
+    return card;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ==== ЛАЙТБОКС ФОТО ====
+  const photoModal = document.getElementById('photo-modal');
+  const photoModalImg = document.getElementById('photo-modal-img');
+  function openPhotoModal(url) {
+    photoModalImg.src = url;
+    photoModal.style.display = 'flex';
+  }
+  photoModal.addEventListener('click', () => { photoModal.style.display = 'none'; });
+</script>
+</body>
+</html>
