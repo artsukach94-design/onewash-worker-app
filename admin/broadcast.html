@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mage Wash — Розсилка push</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mage Wash Admin">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>Mage Wash</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <img src="icon-192.png" class="brand-mark" style="object-fit:cover;">
+        <div class="brand-text"><b>Mage Wash</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+        <a class="nav-item" href="payments.html">Посилання на оплату</a>
+        <a class="nav-item" href="reviews.html">Відгуки</a>
+        <a class="nav-item active" href="broadcast.html">Розсилка push</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Розсилка push</h1><div class="sub" id="page-sub">Довільне сповіщення клієнтам застосунку</div></div>
+      </div>
+      <div class="content" id="page-content">
+
+        <div class="panel">
+          <div class="panel-head"><h3>Фільтри отримувачів</h3></div>
+          <div class="panel-body">
+            <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;">
+              Кожен фільтр опціональний — заповнені застосовуються одночасно (AND). Порожні ігноруються.
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:640px;">
+              <div class="form-group">
+                <label>Телефон (частковий збіг)</label>
+                <input type="text" id="f-phone" placeholder="напр. 0987772105">
+              </div>
+              <div class="form-group">
+                <label>Мийка</label>
+                <select id="f-location"><option value="">Будь-яка</option></select>
+              </div>
+              <div class="form-group">
+                <label>Місто</label>
+                <select id="f-city"><option value="">Будь-яке</option></select>
+              </div>
+              <div class="form-group">
+                <label>Чи вже бронював у застосунку</label>
+                <select id="f-has-booked">
+                  <option value="">Неважливо</option>
+                  <option value="true">Так, вже бронював</option>
+                  <option value="false">Ще жодного разу</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-sm" id="preview-btn" style="margin-top:6px;">Порахувати отримувачів</button>
+            <p id="preview-result" style="font-size:13px;font-weight:600;margin-top:10px;min-height:18px;"></p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>Повідомлення</h3></div>
+          <div class="panel-body" style="max-width:520px;">
+            <div class="form-group">
+              <label>Заголовок</label>
+              <input type="text" id="msg-title" placeholder="напр. Знижка на мийку цих вихідних">
+            </div>
+            <div class="form-group">
+              <label>Текст</label>
+              <textarea id="msg-body" style="min-height:100px;width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;" placeholder="Текст сповіщення..."></textarea>
+            </div>
+            <button class="btn btn-primary" id="send-btn">Надіслати розсилку</button>
+            <p id="send-status" style="font-size:12.5px;margin-top:10px;min-height:18px;"></p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  initAdminPage(async (admin, locations) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+
+    const locSelect = document.getElementById('f-location');
+    const citySelect = document.getElementById('f-city');
+    const cities = new Set();
+
+    locations.forEach((l) => {
+      const opt = document.createElement('option');
+      opt.value = l.id;
+      opt.textContent = l.name;
+      locSelect.appendChild(opt);
+      if (l.city) cities.add(l.city);
+    });
+    Array.from(cities).sort().forEach((city) => {
+      const opt = document.createElement('option');
+      opt.value = city;
+      opt.textContent = city;
+      citySelect.appendChild(opt);
+    });
+  });
+
+  function currentFilters() {
+    const hasBookedVal = document.getElementById('f-has-booked').value;
+    return {
+      phone: document.getElementById('f-phone').value.trim() || undefined,
+      locationId: document.getElementById('f-location').value || undefined,
+      city: document.getElementById('f-city').value || undefined,
+      hasBooked: hasBookedVal === '' ? undefined : hasBookedVal === 'true',
+    };
+  }
+
+  async function callBroadcast(payload) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${supabase.supabaseUrl}/functions/v1/broadcast-push`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Помилка запиту');
+    return data;
+  }
+
+  document.getElementById('preview-btn').addEventListener('click', async () => {
+    const resultEl = document.getElementById('preview-result');
+    resultEl.style.color = 'var(--text-2)';
+    resultEl.textContent = 'Рахуємо...';
+    try {
+      const { count } = await callBroadcast({ ...currentFilters(), preview: true });
+      resultEl.style.color = 'var(--cyan-600)';
+      resultEl.textContent = `Під ці фільтри підпадає: ${count} ${pluralClients(count)}`;
+    } catch (err) {
+      resultEl.style.color = 'var(--red-600)';
+      resultEl.textContent = err.message;
+    }
+  });
+
+  document.getElementById('send-btn').addEventListener('click', async () => {
+    const title = document.getElementById('msg-title').value.trim();
+    const message = document.getElementById('msg-body').value.trim();
+    const statusEl = document.getElementById('send-status');
+
+    if (!title || !message) {
+      statusEl.style.color = 'var(--red-600)';
+      statusEl.textContent = 'Заповніть заголовок і текст';
+      return;
+    }
+
+    try {
+      const { count: previewCount } = await callBroadcast({ ...currentFilters(), preview: true });
+      if (previewCount === 0) {
+        statusEl.style.color = 'var(--red-600)';
+        statusEl.textContent = 'Під поточні фільтри не підпадає жоден клієнт';
+        return;
+      }
+      if (!confirm(`Надіслати push ${previewCount} ${pluralClients(previewCount)}?`)) return;
+
+      const sendBtn = document.getElementById('send-btn');
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Надсилаємо...';
+
+      const { count } = await callBroadcast({ ...currentFilters(), title, message });
+      statusEl.style.color = 'var(--green-600)';
+      statusEl.textContent = `✅ Надіслано ${count} ${pluralClients(count)}`;
+    } catch (err) {
+      statusEl.style.color = 'var(--red-600)';
+      statusEl.textContent = err.message;
+    } finally {
+      const sendBtn = document.getElementById('send-btn');
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Надіслати розсилку';
+    }
+  });
+
+  function pluralClients(n) {
+    const mod10 = n % 10, mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return 'клієнту';
+    if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return 'клієнтам';
+    return 'клієнтам';
+  }
+</script>
+</body>
+</html>
