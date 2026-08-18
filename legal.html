@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="page-title">Mage Wash</title>
+<style>
+  body{margin:0;background:#F3F6F9;color:#16232F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;}
+  .wrap{max-width:720px;margin:0 auto;padding:48px 20px 80px;}
+  h1{font-size:22px;margin:0 0 24px;}
+  #content{font-size:14px;line-height:1.7;white-space:pre-wrap;color:#2A3B4C;}
+  .empty{color:#8B98A6;font-style:italic;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 id="heading">Завантаження…</h1>
+    <div id="content"></div>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+    // Той самий публічний anon-ключ, що й в адмін-панелі — платформна
+    // Політика/Оферта читається будь-ким через RLS-політику "anyone can view
+    // platform settings", безпечно вбудовувати в статичну сторінку.
+    const SUPABASE_URL = 'https://elrmeekxaxcyxdyzqtzg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVscm1lZWt4YXhjeXhkeXpxdHpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MDA4MTIsImV4cCI6MjA5OTE3NjgxMn0.XfLB_ZPMbnnlK-TJX05vVipk6XxZPZlq95sbIAwDwFs';
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const doc = new URLSearchParams(location.search).get('doc') === 'offer' ? 'offer' : 'privacy';
+    const heading = doc === 'offer' ? 'Публічна оферта' : 'Політика конфіденційності';
+    document.getElementById('heading').textContent = heading;
+    document.getElementById('page-title').textContent = heading + ' — Mage Wash';
+
+    const field = doc === 'offer' ? 'public_offer' : 'privacy_policy';
+    const { data, error } = await supabase
+      .from('platform_settings')
+      .select(field)
+      .eq('id', true)
+      .maybeSingle();
+
+    const content = document.getElementById('content');
+    if (error) {
+      content.textContent = 'Не вдалося завантажити текст. Спробуйте оновити сторінку.';
+    } else if (data && data[field]) {
+      content.textContent = data[field];
+    } else {
+      content.innerHTML = '<span class="empty">Текст ще не додано.</span>';
+    }
+  </script>
+</body>
+</html>
