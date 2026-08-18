@@ -140,23 +140,41 @@
         </div>
 
         <div class="panel">
-          <div class="panel-head"><h3>WayForPay — прийом оплат</h3></div>
+          <div class="panel-head"><h3>Прийом оплат</h3></div>
           <div class="panel-body">
-            <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;">Реквізити вашого власного акаунта WayForPay для цієї мийки. Знайти їх можна в особистому кабінеті WayForPay → Мій магазин → Налаштування.</p>
-            <div class="form-group" style="max-width:340px;">
-              <label>Merchant Account (логін магазину)</label>
-              <input type="text" id="wfp-merchant" placeholder="onewash_ternopil">
+            <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;">Оберіть, через який сервіс ця мийка приймає онлайн-оплату. Реквізити обох сервісів зберігаються окремо — можна перемикатись без повторного введення.</p>
+
+            <div style="display:flex;gap:8px;margin-bottom:18px;">
+              <button type="button" class="btn btn-sm" id="provider-wfp-btn">WayForPay</button>
+              <button type="button" class="btn btn-sm" id="provider-mono-btn">Monobank</button>
             </div>
-            <div class="form-group" style="max-width:340px;">
-              <label>Secret Key</label>
-              <input type="password" id="wfp-secret" placeholder="••••••••••••••••">
+
+            <div id="wfp-fields">
+              <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;">Реквізити вашого власного акаунта WayForPay для цієї мийки. Знайти їх можна в особистому кабінеті WayForPay → Мій магазин → Налаштування.</p>
+              <div class="form-group" style="max-width:340px;">
+                <label>Merchant Account (логін магазину)</label>
+                <input type="text" id="wfp-merchant" placeholder="onewash_ternopil">
+              </div>
+              <div class="form-group" style="max-width:340px;">
+                <label>Secret Key</label>
+                <input type="password" id="wfp-secret" placeholder="••••••••••••••••">
+              </div>
+              <div class="form-group" style="max-width:340px;">
+                <label>Домен сайту (Merchant Domain Name)</label>
+                <input type="text" id="wfp-domain" placeholder="mage-wash.online">
+              </div>
             </div>
-            <div class="form-group" style="max-width:340px;">
-              <label>Домен сайту (Merchant Domain Name)</label>
-              <input type="text" id="wfp-domain" placeholder="mage-wash.online">
+
+            <div id="mono-fields" style="display:none;">
+              <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;">Токен еквайрингу Monobank для цієї мийки. Знайти можна в застосунку Monobank → Мій бізнес → Прийом платежів → Токен API.</p>
+              <div class="form-group" style="max-width:340px;">
+                <label>API-токен Monobank</label>
+                <input type="password" id="mono-token" placeholder="••••••••••••••••">
+              </div>
             </div>
-            <button class="btn btn-primary btn-sm" id="save-wfp">Зберегти реквізити</button>
-            <p id="wfp-status" style="font-size:11.5px;color:var(--text-3);margin-top:8px;"></p>
+
+            <button class="btn btn-primary btn-sm" id="save-payment-provider">Зберегти</button>
+            <p id="payment-provider-status" style="font-size:11.5px;color:var(--text-3);margin-top:8px;"></p>
           </div>
         </div>
 
@@ -199,7 +217,7 @@
   });
 
   async function loadAll() {
-    await Promise.all([loadBoxes(), loadTypes(), loadExtras(), loadLocationSettings(), loadLogo(), loadCoverPhoto(), loadWayForPay(), loadWorkingHours(), loadLegalDocuments()]);
+    await Promise.all([loadBoxes(), loadTypes(), loadExtras(), loadLocationSettings(), loadLogo(), loadCoverPhoto(), loadPaymentProvider(), loadWorkingHours(), loadLegalDocuments()]);
     renderPriceMatrix();
   }
 
@@ -640,38 +658,63 @@
     alert('Збережено');
   });
 
-  // ==== WAYFORPAY ====
-  async function loadWayForPay() {
+  // ==== ПРИЙОМ ОПЛАТ (WayForPay / Monobank — мийка обирає один із двох) ====
+  let selectedProvider = 'wayforpay';
+  let lastCredsData = null;
+
+  async function loadPaymentProvider() {
     const { data, error } = await supabase
       .from('location_payment_credentials')
-      .select('wayforpay_merchant_account, wayforpay_secret_key, wayforpay_domain')
+      .select('provider, wayforpay_merchant_account, wayforpay_secret_key, wayforpay_domain, monobank_token')
       .eq('location_id', currentLocationId).maybeSingle();
     if (error) { console.error(error); return; }
+    lastCredsData = data;
+
     document.getElementById('wfp-merchant').value = data?.wayforpay_merchant_account || '';
     document.getElementById('wfp-secret').value = data?.wayforpay_secret_key || '';
     document.getElementById('wfp-domain').value = data?.wayforpay_domain || 'mage-wash.online';
+    document.getElementById('mono-token').value = data?.monobank_token || '';
 
-    const status = document.getElementById('wfp-status');
-    status.textContent = data?.wayforpay_merchant_account && data?.wayforpay_secret_key
-      ? '✅ Реквізити збережено — можна створювати посилання на оплату'
-      : '⚠️ Реквізити ще не вказано — посилання на оплату не працюватимуть';
+    selectedProvider = data?.provider === 'monobank' ? 'monobank' : 'wayforpay';
+    renderProviderTabs();
   }
 
-  document.getElementById('save-wfp').addEventListener('click', async () => {
-    const merchant = document.getElementById('wfp-merchant').value.trim();
-    const secret = document.getElementById('wfp-secret').value.trim();
-    const domain = document.getElementById('wfp-domain').value.trim();
+  function renderProviderTabs() {
+    document.getElementById('provider-wfp-btn').classList.toggle('btn-primary', selectedProvider === 'wayforpay');
+    document.getElementById('provider-mono-btn').classList.toggle('btn-primary', selectedProvider === 'monobank');
+    document.getElementById('wfp-fields').style.display = selectedProvider === 'wayforpay' ? '' : 'none';
+    document.getElementById('mono-fields').style.display = selectedProvider === 'monobank' ? '' : 'none';
 
-    const { error } = await supabase.from('location_payment_credentials').upsert({
-      location_id: currentLocationId,
-      wayforpay_merchant_account: merchant,
-      wayforpay_secret_key: secret,
-      wayforpay_domain: domain
-    }, { onConflict: 'location_id' });
+    const status = document.getElementById('payment-provider-status');
+    const d = lastCredsData;
+    const ok = selectedProvider === 'monobank'
+      ? !!d?.monobank_token
+      : !!(d?.wayforpay_merchant_account && d?.wayforpay_secret_key);
+    const providerLabel = selectedProvider === 'monobank' ? 'Monobank' : 'WayForPay';
+    status.textContent = ok
+      ? `✅ Активний спосіб оплати: ${providerLabel} — можна створювати посилання на оплату`
+      : `⚠️ Реквізити ${providerLabel} ще не вказано — оплата не працюватиме`;
+  }
 
+  document.getElementById('provider-wfp-btn').addEventListener('click', () => { selectedProvider = 'wayforpay'; renderProviderTabs(); });
+  document.getElementById('provider-mono-btn').addEventListener('click', () => { selectedProvider = 'monobank'; renderProviderTabs(); });
+
+  document.getElementById('save-payment-provider').addEventListener('click', async () => {
+    // Пишемо тільки поля активного провайдера — реквізити другого лишаються
+    // недоторканими в БД, тож перемикання туди-назад нічого не втрачає.
+    const payload = { location_id: currentLocationId, provider: selectedProvider };
+    if (selectedProvider === 'wayforpay') {
+      payload.wayforpay_merchant_account = document.getElementById('wfp-merchant').value.trim();
+      payload.wayforpay_secret_key = document.getElementById('wfp-secret').value.trim();
+      payload.wayforpay_domain = document.getElementById('wfp-domain').value.trim();
+    } else {
+      payload.monobank_token = document.getElementById('mono-token').value.trim();
+    }
+
+    const { error } = await supabase.from('location_payment_credentials').upsert(payload, { onConflict: 'location_id' });
     if (error) { console.error(error); alert('Помилка збереження'); return; }
-    alert('Реквізити збережено');
-    await loadWayForPay();
+    alert('Збережено');
+    await loadPaymentProvider();
   });
 </script>
 </body>
