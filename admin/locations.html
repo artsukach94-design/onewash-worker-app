@@ -88,6 +88,30 @@
             <p id="ps-status" style="font-size:11.5px;color:var(--text-3);margin-top:8px;"></p>
           </div>
         </div>
+
+        <div class="panel" id="app-update-panel" style="display:none;">
+          <div class="panel-head"><h3>Оновлення застосунку</h3></div>
+          <div class="panel-body">
+            <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;">
+              Публікація нової версії тут показує клієнтам плашку "оновіться" на головному екрані застосунку
+              і одразу надсилає одноразовий push усім клієнтам з підключеними сповіщеннями. Робіть це, коли
+              нова версія вже реально пройшла ревʼю і опублікована в App Store / Google Play.
+            </p>
+            <p style="font-size:12px;color:var(--text-3);margin:0 0 14px;">
+              Зараз опублікована версія: <b id="current-app-version">—</b>
+            </p>
+            <div class="form-group" style="max-width:220px;">
+              <label>Нова версія (напр. 1.0.1)</label>
+              <input type="text" id="app-version-input" placeholder="1.0.1">
+            </div>
+            <div class="form-group">
+              <label>Текст повідомлення (необов'язково — інакше буде стандартний)</label>
+              <textarea id="app-version-note" style="min-height:70px;width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></textarea>
+            </div>
+            <button class="btn btn-primary btn-sm" id="publish-app-version">Опублікувати версію і надіслати push</button>
+            <p id="app-version-status" style="font-size:11.5px;color:var(--text-3);margin-top:8px;"></p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -142,6 +166,7 @@
 
     document.getElementById('add-location-btn').style.display = 'inline-block';
     document.getElementById('platform-settings-panel').style.display = 'block';
+    document.getElementById('app-update-panel').style.display = 'block';
     await loadLocations();
     await loadPlatformSettings();
   });
@@ -153,6 +178,9 @@
     document.getElementById('ps-support-url').value = data?.support_chat_url || '';
     document.getElementById('ps-privacy').value = data?.privacy_policy || '';
     document.getElementById('ps-offer').value = data?.public_offer || '';
+    document.getElementById('current-app-version').textContent = data?.latest_app_version || 'ще не публікувалась';
+    document.getElementById('app-version-input').value = data?.latest_app_version || '';
+    document.getElementById('app-version-note').value = data?.latest_app_version_note || '';
   }
 
   document.getElementById('save-platform-settings').addEventListener('click', async () => {
@@ -168,6 +196,42 @@
     if (error) { console.error(error); status.textContent = 'Помилка збереження'; status.style.color = 'var(--red-600)'; return; }
     status.textContent = '✅ Збережено';
     status.style.color = 'var(--green-600)';
+  });
+
+  // ==== ОНОВЛЕННЯ ЗАСТОСУНКУ (публікація версії + одноразовий push усім) ====
+  document.getElementById('publish-app-version').addEventListener('click', async () => {
+    const version = document.getElementById('app-version-input').value.trim();
+    const note = document.getElementById('app-version-note').value.trim();
+    const status = document.getElementById('app-version-status');
+
+    if (!version) { alert('Вкажіть номер версії'); return; }
+    if (!confirm(
+      `Опублікувати версію ${version}?\n\nЦе одразу надішле push-сповіщення УСІМ клієнтам платформи. Переконайтесь, що версія вже реально пройшла ревʼю в App Store / Google Play.`
+    )) return;
+
+    const btn = document.getElementById('publish-app-version');
+    btn.disabled = true;
+    btn.textContent = 'Публікуємо...';
+
+    // update спрацьовує, навіть якщо значення версії не змінилось відносно
+    // поточного (щоб можна було повторно відправити push тим самим текстом) —
+    // тригер у БД реагує лише на РЕАЛЬНУ зміну latest_app_version, тож для
+    // повторної відправки з тим самим номером спершу скидаємо в null.
+    if (version === document.getElementById('current-app-version').textContent) {
+      await supabase.from('platform_settings').update({ latest_app_version: null }).eq('id', true);
+    }
+
+    const { error } = await supabase.from('platform_settings').update({
+      latest_app_version: version, latest_app_version_note: note || null
+    }).eq('id', true);
+
+    btn.disabled = false;
+    btn.textContent = 'Опублікувати версію і надіслати push';
+
+    if (error) { console.error(error); status.textContent = 'Помилка публікації'; status.style.color = 'var(--red-600)'; return; }
+    status.textContent = `✅ Версію ${version} опубліковано, push надіслано`;
+    status.style.color = 'var(--green-600)';
+    await loadPlatformSettings();
   });
 
   async function loadLocations() {
