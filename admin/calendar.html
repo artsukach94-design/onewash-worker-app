@@ -184,7 +184,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initAdminPage, wireLoginForm, logout, formatTime } from './app.js';
+  import { supabase, initAdminPage, wireLoginForm, logout, formatTime, formatServicesLabel } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -643,7 +643,7 @@
 
     const { data: bookings, error } = await supabase
       .from('bookings')
-      .select('*, cars(*), clients(*), wash_types(*), staff(full_name), wash_boxes(name)')
+      .select('*, cars(*), clients(*), wash_types(*), staff(full_name), wash_boxes(name), booking_extras(extra_services(name))')
       .eq('location_id', currentLocationId)
       .gte('scheduled_at', start.toISOString())
       .lte('scheduled_at', end.toISOString())
@@ -665,7 +665,7 @@
       const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.cars.plate || ''}` : 'Без даних авто';
       const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
       const staffLabel = b.staff?.full_name || 'Не призначено';
-      const washLabel = b.wash_types?.name || '';
+      const washLabel = formatServicesLabel(b);
       const boxLabel = b.wash_boxes?.name ? ' · ' + b.wash_boxes.name : '';
       const endLabel = b.scheduled_end ? ` (до ${new Date(b.scheduled_end).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })})` : '';
       const sourceLabel = { site: 'сайт', manual: 'вручну', call: 'дзвінок', admin: 'адмін' }[b.source] || b.source;

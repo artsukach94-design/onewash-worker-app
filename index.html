@@ -91,7 +91,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initPage, wireLoginForm, logout, formatTime, subscribeToTable, getPushSubscriptionStatus, enablePushNotifications, disablePushNotifications, isIos, isStandaloneApp } from './app.js';
+  import { supabase, initPage, wireLoginForm, logout, formatTime, formatServicesLabel, subscribeToTable, getPushSubscriptionStatus, enablePushNotifications, disablePushNotifications, isIos, isStandaloneApp } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -296,7 +296,7 @@
 
     let query = supabase
       .from('bookings')
-      .select('*, cars(*), clients(*), wash_types(*)')
+      .select('*, cars(*), clients(*), wash_types(*), booking_extras(extra_services(name))')
       .eq('location_id', staff.location_id)
       .gte('scheduled_at', startOfDay.toISOString())
       .lte('scheduled_at', endOfDay.toISOString())
@@ -336,7 +336,7 @@
     const pillClass = { pending: 'pending', confirmed: 'confirmed', in_progress: 'progress' }[b.status] || '';
     const carLabel = b.cars ? `${b.cars.brand_model || 'Авто'} · ${b.cars.plate || '—'}` : 'Авто не вказано';
     const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
-    const washLabel = b.wash_types?.name || 'Послуга не вказана';
+    const washLabel = formatServicesLabel(b);
     const unassigned = !b.staff_id;
 
     let actions = '';

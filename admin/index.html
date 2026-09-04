@@ -129,7 +129,7 @@
 
 <script type="module">
   import {
-    supabase, initAdminPage, wireLoginForm, logout, formatTime, subscribeToTable,
+    supabase, initAdminPage, wireLoginForm, logout, formatTime, formatServicesLabel, subscribeToTable,
     getPushSubscriptionStatus, enablePushNotifications, disablePushNotifications, isIos, isStandaloneApp,
   } from './app.js';
 
@@ -208,7 +208,7 @@
 
     const { data: bookings, error } = await supabase
       .from('bookings')
-      .select('*, cars(*), clients(*), wash_types(*), staff(full_name), wash_boxes(name)')
+      .select('*, cars(*), clients(*), wash_types(*), staff(full_name), wash_boxes(name), booking_extras(extra_services(name))')
       .eq('location_id', locationId)
       .gte('scheduled_at', startOfDay.toISOString())
       .lte('scheduled_at', endOfDay.toISOString())
@@ -247,7 +247,7 @@
       const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.cars.plate || ''}` : 'Без даних авто';
       const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
       const staffLabel = b.staff?.full_name || 'Не призначено';
-      const washLabel = b.wash_types?.name || '';
+      const washLabel = formatServicesLabel(b);
       const boxLabel = b.wash_boxes?.name ? ' · ' + b.wash_boxes.name : '';
       const sourceLabel = { site: 'сайт', manual: 'вручну', call: 'дзвінок', admin: 'адмін' }[b.source] || b.source;
 
@@ -395,7 +395,7 @@
 
     const { data: b, error } = await supabase
       .from('bookings')
-      .select('*, cars(*), clients(*), wash_types(*), staff(full_name), wash_boxes(name), wash_photos(*), wash_videos(*)')
+      .select('*, cars(*), clients(*), wash_types(*), staff(full_name), wash_boxes(name), wash_photos(*), wash_videos(*), booking_extras(extra_services(name))')
       .eq('id', bookingId).single();
 
     if (error || !b) { body.innerHTML = '<p>Помилка завантаження</p>'; return; }
@@ -420,7 +420,7 @@
       <div style="margin-bottom:10px;"><b style="font-size:14.5px;">${carLabel}</b><br><span style="color:var(--text-2);">${b.cars?.color || ''}</span></div>
       <div class="sched-info" style="margin-bottom:12px;">
         <span>Дата: <b>${date}</b></span><br>
-        <span>Послуга: <b>${b.wash_types?.name || '—'}</b>${b.wash_boxes?.name ? ' · ' + b.wash_boxes.name : ''}</span><br>
+        <span>Послуга: <b>${formatServicesLabel(b)}</b>${b.wash_boxes?.name ? ' · ' + b.wash_boxes.name : ''}</span><br>
         <span>Мийник: <b>${b.staff?.full_name || 'Не призначено'}</b></span><br>
         <span>Клієнт: <b>${b.clients?.full_name || b.clients?.phone || '—'}</b></span><br>
         <span>Вартість: <b>${Number(b.total_price || 0).toLocaleString('uk-UA')} грн</b></span>

@@ -165,6 +165,20 @@ export function formatDayShort(date) {
   return date.toLocaleDateString('uk-UA', { weekday: 'short' }).replace('.', '');
 }
 
+// Повний перелік послуг запису: основна (wash_types) + всі додаткові
+// (booking_extras → extra_services.name). Раніше скрізь показувалась лише
+// основна послуга — мийник не бачив, що ще треба зробити (хімчистка сидіння,
+// видалення плям тощо), доки не відкриє сам запис.
+// Очікує booking із select-запиту, що містить wash_types(name) і
+// booking_extras(extra_services(name)).
+export function formatServicesLabel(booking) {
+  const main = booking.wash_types?.name || 'Послугу не вказано';
+  const extras = (booking.booking_extras || [])
+    .map((be) => be.extra_services?.name)
+    .filter(Boolean);
+  return extras.length ? `${main} + ${extras.join(', ')}` : main;
+}
+
 // Підписка на зміни в таблиці в реальному часі (Supabase Realtime).
 // onChange викликається при будь-якій вставці/оновленні/видаленні рядка,
 // що відповідає фільтру. Найпростіший підхід — просто перезавантажити дані.

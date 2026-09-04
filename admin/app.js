@@ -227,6 +227,17 @@ export function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
 }
 
+// Повний перелік послуг запису: основна (wash_types) + всі додаткові
+// (booking_extras → extra_services.name). Очікує booking із select-запиту,
+// що містить wash_types(name) і booking_extras(extra_services(name)).
+export function formatServicesLabel(booking) {
+  const main = booking.wash_types?.name || 'Послугу не вказано';
+  const extras = (booking.booking_extras || [])
+    .map((be) => be.extra_services?.name)
+    .filter(Boolean);
+  return extras.length ? `${main} + ${extras.join(', ')}` : main;
+}
+
 export function subscribeToTable(channelName, table, filter, onChange) {
   return supabase
     .channel(channelName)

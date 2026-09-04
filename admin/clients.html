@@ -111,7 +111,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initAdminPage, wireLoginForm, logout, formatTime } from './app.js';
+  import { supabase, initAdminPage, wireLoginForm, logout, formatTime, formatServicesLabel } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -302,7 +302,7 @@
 
     const { data: bookings, error } = await supabase
       .from('bookings')
-      .select('*, cars(brand_model, plate), wash_types(name), staff(full_name, photo_url), wash_photos(*)')
+      .select('*, cars(brand_model, plate), wash_types(name), staff(full_name, photo_url), wash_photos(*), booking_extras(extra_services(name))')
       .eq('client_id', clientId)
       .eq('status', 'done')
       .order('scheduled_at', { ascending: false });
@@ -337,7 +337,7 @@
           <b style="font-size:13px;">${date}</b>
           <b style="font-size:13.5px;">${Number(b.total_price || 0).toLocaleString('uk-UA')} грн</b>
         </div>
-        <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">${carLabel} · ${b.wash_types?.name || ''} · мийник: ${staffLabel}</div>
+        <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">${carLabel} · ${formatServicesLabel(b)} · мийник: ${staffLabel}</div>
         ${photosHtml ? `<div>${photosHtml}</div>` : '<div style="font-size:11.5px;color:var(--text-3);">Фото немає</div>'}
       `;
       list.appendChild(card);

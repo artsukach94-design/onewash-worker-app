@@ -543,6 +543,17 @@
     return 'MW-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8).toUpperCase();
   }
 
+  // payment_links зберігає додаткові послуги окремо (jsonb-масив extra_service_id
+  // + price, не через booking_extras), тож спільний formatServicesLabel сюди не
+  // підходить — резолвимо назви через уже завантажений extraServices (loadOptions).
+  function formatLinkServices(l) {
+    const main = l.wash_types?.name || '—';
+    const extraNames = (l.extras || [])
+      .map((e) => extraServices.find((es) => es.id === e.extra_service_id)?.name)
+      .filter(Boolean);
+    return extraNames.length ? `${main} + ${extraNames.join(', ')}` : main;
+  }
+
   async function loadLinks() {
     const { data: links, error } = await supabase
       .from('payment_links')
@@ -571,7 +582,7 @@
       row.innerHTML = `
         <td>${l.client_name || '—'}<br><span style="color:var(--text-2);font-size:11.5px;">${l.client_phone}</span></td>
         <td><b>${Number(l.amount).toLocaleString('uk-UA')} грн</b>${l.total_cost && Number(l.total_cost) !== Number(l.amount) ? `<br><span style="font-size:11px;color:var(--text-2);">з ${Number(l.total_cost).toLocaleString('uk-UA')} грн повної вартості</span>` : ''}</td>
-        <td>${l.wash_types?.name || '—'}</td>
+        <td>${formatLinkServices(l)}</td>
         <td>${scheduledLabel}</td>
         <td><span style="color:${statusColors[l.status]};font-weight:600;">${statusLabels[l.status] || l.status}</span></td>
         <td>
