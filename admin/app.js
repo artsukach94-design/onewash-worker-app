@@ -194,8 +194,35 @@ export async function initAdminPage(onReady) {
   if (nameEl) nameEl.textContent = admin.is_superadmin ? 'Суперадмін' : 'Адміністратор мийки';
 
   renderLocationSwitcher(locations, selectedId);
+  setupMobileNav();
 
   await onReady(admin, locations, selectedId);
+}
+
+// Гамбургер-кнопка й висувна sidebar-панель на вузьких екранах. Інжектиться
+// звідси централізовано (не в кожен HTML-файл окремо) — .topbar і .sidebar
+// вже є на кожній адмін-сторінці, тож досить одного місця для всіх.
+function setupMobileNav() {
+  const app = document.querySelector('.app');
+  const topbar = document.querySelector('.topbar');
+  const sidebar = document.querySelector('.sidebar');
+  if (!app || !topbar || !sidebar || document.querySelector('.mobile-menu-btn')) return;
+
+  const menuBtn = document.createElement('button');
+  menuBtn.className = 'mobile-menu-btn';
+  menuBtn.setAttribute('aria-label', 'Меню');
+  menuBtn.textContent = '☰';
+  topbar.prepend(menuBtn);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'sidebar-backdrop';
+  app.appendChild(backdrop);
+
+  function closeNav() { app.classList.remove('sidebar-open'); }
+
+  menuBtn.addEventListener('click', () => app.classList.toggle('sidebar-open'));
+  backdrop.addEventListener('click', closeNav);
+  sidebar.querySelectorAll('.nav-item').forEach((item) => item.addEventListener('click', closeNav));
 }
 
 function renderLocationSwitcher(locations, selectedId) {
