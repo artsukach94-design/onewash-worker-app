@@ -117,7 +117,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initAdminPage, wireLoginForm, logout, formatTime, createAuthUser, generatePassword } from './app.js';
+  import { supabase, initAdminPage, wireLoginForm, logout, formatTime, createAuthUser, generatePassword, ensureUniqueSlug } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -235,10 +235,13 @@
     btn.textContent = 'Створюємо...';
 
     try {
-      // 1. сама мийка — is_published:false, поки не оплатить підписку
+      // 1. сама мийка — is_published:false, поки не оплатить підписку;
+      // slug — транслітерований і гарантовано унікальний "хвостик" адреси
+      // (mage-wash.online/{slug})
+      const slug = await ensureUniqueSlug(app.business_name);
       const { data: location, error: locErr } = await supabase
         .from('locations')
-        .insert({ name: app.business_name, city: app.city, is_published: false })
+        .insert({ name: app.business_name, city: app.city, is_published: false, slug })
         .select().single();
       if (locErr) throw locErr;
 
@@ -269,7 +272,7 @@
 
       document.getElementById('approve-modal').style.display = 'none';
       alert(
-        `Мийку "${app.business_name}" створено.\n\nПередайте власнику дані для входу в адмінку:\nEmail: ${email}\nПароль: ${password}\n\n` +
+        `Мийку "${app.business_name}" створено.\nАдреса: mage-wash.online/${slug}\n\nПередайте власнику дані для входу в адмінку:\nEmail: ${email}\nПароль: ${password}\n\n` +
         `Мийка ще НЕ видима клієнтам — з'явиться в застосунку автоматично, щойно партнер оплатить першу підписку (1000 грн/міс) у своїй адмінці.`
       );
       await loadApplications();

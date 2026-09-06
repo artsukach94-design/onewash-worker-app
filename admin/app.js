@@ -8,6 +8,46 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ============================================================
+// Транслітерація + унікальний slug для адреси мийки (mage-wash.online/{slug})
+// За офіційним українським стандартом транслітерації (Постанова КМУ №55, 2010).
+// ============================================================
+const TRANSLIT_MAP = {
+  'а':'a','б':'b','в':'v','г':'h','ґ':'g','д':'d','е':'e','є':'ie','ж':'zh','з':'z',
+  'и':'y','і':'i','ї':'i','й':'i','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p',
+  'р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch',
+  'ю':'iu','я':'ia','ь':'','ъ':'',
+};
+
+export function transliterate(str) {
+  return str.toLowerCase().split('').map(ch => TRANSLIT_MAP[ch] ?? ch).join('');
+}
+
+export function slugify(name) {
+  const translit = transliterate(name || '');
+  return translit
+    .replace(/['’ʼ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'myika';
+}
+
+// Якщо базовий slug вже зайнятий іншою мийкою — додає -2, -3 і т.д.
+export async function ensureUniqueSlug(baseName, excludeLocationId = null) {
+  const base = slugify(baseName);
+  let candidate = base;
+  let n = 2;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let query = supabase.from('locations').select('id').eq('slug', candidate);
+    if (excludeLocationId) query = query.neq('id', excludeLocationId);
+    const { data } = await query.maybeSingle();
+    if (!data) return candidate;
+    candidate = `${base}-${n}`;
+    n++;
+  }
+}
+
 // Створює новий логін (email+пароль) у Supabase Auth і повертає його User UID.
 // Використовує ОКРЕМИЙ тимчасовий клієнт (persistSession:false), щоб не втратити
 // сесію адміністратора, який зараз залогінений у цьому вікні браузера.
