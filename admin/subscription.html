@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mage Wash — Підписка</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mage Wash Admin">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>Mage Wash</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <img src="icon-192.png" class="brand-mark" style="object-fit:cover;">
+        <div class="brand-text"><b>Mage Wash</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+        <a class="nav-item" href="payments.html">Посилання на оплату</a>
+        <a class="nav-item" href="reviews.html">Відгуки</a>
+        <a class="nav-item" href="broadcast.html">Розсилка push</a>
+        <a class="nav-item" href="analytics.html">Аналітика</a>
+        <a class="nav-item active" href="subscription.html">Підписка</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+        <a class="nav-item" href="applications.html">Заявки на підключення</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Підписка на платформу</h1><div class="sub">1000 грн/міс</div></div>
+      </div>
+      <div class="content" id="page-content">
+
+        <div class="panel">
+          <div class="panel-head"><h3>Стан підписки</h3></div>
+          <div class="panel-body">
+            <p style="font-size:14px;margin:0 0 4px;" id="sub-status-line">Завантаження...</p>
+            <p style="font-size:12.5px;color:var(--text-2);margin:0 0 18px;" id="sub-detail-line"></p>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" id="sub-pay-btn">Оплатити</button>
+              <button class="btn btn-sm" id="sub-change-card-btn" style="display:none;">Змінити спосіб оплати</button>
+              <button class="btn btn-sm" id="sub-cancel-btn" style="display:none;color:var(--red-600);">Скасувати підписку</button>
+              <button class="btn btn-sm" id="sub-reactivate-btn" style="display:none;color:var(--green-600);">Поновити підписку</button>
+            </div>
+            <p style="font-size:11.5px;color:var(--text-3);margin-top:12px;">
+              Скасування не вимикає мийку одразу — вона лишиться видимою клієнтам до кінця вже оплаченого періоду.
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentLocationId = null;
+
+  initAdminPage(async (admin, locations, locationId) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+    currentLocationId = locationId;
+    await loadSubscription();
+  });
+
+  async function loadSubscription() {
+    const { data: sub, error } = await supabase
+      .from('platform_subscriptions')
+      .select('*')
+      .eq('location_id', currentLocationId)
+      .maybeSingle();
+
+    const statusLine = document.getElementById('sub-status-line');
+    const detailLine = document.getElementById('sub-detail-line');
+    const payBtn = document.getElementById('sub-pay-btn');
+    const changeCardBtn = document.getElementById('sub-change-card-btn');
+    const cancelBtn = document.getElementById('sub-cancel-btn');
+    const reactivateBtn = document.getElementById('sub-reactivate-btn');
+
+    payBtn.style.display = 'none';
+    changeCardBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    reactivateBtn.style.display = 'none';
+
+    if (error || !sub) {
+      statusLine.textContent = 'Підписки ще немає';
+      detailLine.textContent = '';
+      payBtn.style.display = 'inline-block';
+      payBtn.textContent = 'Підключити оплату (1000 грн/міс)';
+      return;
+    }
+
+    const dateLabel = sub.next_charge_date ? new Date(sub.next_charge_date).toLocaleDateString('uk-UA') : '—';
+
+    if (sub.manually_blocked) {
+      statusLine.innerHTML = '<b style="color:var(--red-600);">🔒 Мийку заблоковано адміністрацією платформи</b>';
+      detailLine.textContent = 'Зверніться в підтримку Mage Wash, якщо вважаєте це помилкою.';
+    } else if (sub.status === 'active') {
+      statusLine.innerHTML = `Підписка <b style="color:var(--green-600);">активна</b>`;
+      detailLine.textContent = `Оплачено до ${dateLabel} · наступне списання ${dateLabel} · 1000 грн`;
+      changeCardBtn.style.display = 'inline-block';
+      cancelBtn.style.display = 'inline-block';
+    } else if (sub.status === 'canceled') {
+      statusLine.innerHTML = `Підписку <b>скасовано</b>`;
+      detailLine.textContent = `Мийка лишається видимою клієнтам до ${dateLabel}, далі автоматично приховається`;
+      reactivateBtn.style.display = 'inline-block';
+    } else if (sub.status === 'past_due') {
+      statusLine.innerHTML = `<b style="color:var(--red-600);">Оплата прострочена</b>`;
+      detailLine.textContent = 'Мийку приховано з застосунку — оплатіть, щоб знову з\'явитись клієнтам';
+      payBtn.style.display = 'inline-block';
+      payBtn.textContent = 'Оплатити';
+    } else {
+      statusLine.textContent = 'Очікує першої оплати';
+      detailLine.textContent = 'Мийка невидима клієнтам, поки не оплачено';
+      payBtn.style.display = 'inline-block';
+      payBtn.textContent = 'Підключити оплату (1000 грн/міс)';
+    }
+  }
+
+  async function payOrChangeCard(btn) {
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Готуємо оплату...';
+    try {
+      const { data, error } = await supabase.functions.invoke('create-subscription-invoice', {
+        body: { locationId: currentLocationId },
+      });
+      if (error || !data?.pageUrl) throw new Error(data?.error || error?.message || 'Не вдалося створити рахунок');
+      window.open(data.pageUrl, '_blank');
+    } catch (err) {
+      alert('Помилка: ' + (err.message || 'спробуйте ще раз'));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
+  document.getElementById('sub-pay-btn').addEventListener('click', (e) => payOrChangeCard(e.target));
+  document.getElementById('sub-change-card-btn').addEventListener('click', (e) => payOrChangeCard(e.target));
+
+  document.getElementById('sub-cancel-btn').addEventListener('click', async () => {
+    if (!confirm('Скасувати підписку? Мийка лишиться видимою до кінця вже оплаченого періоду, далі автоматично приховається.')) return;
+    const { error } = await supabase.functions.invoke('manage-subscription', {
+      body: { locationId: currentLocationId, action: 'cancel' },
+    });
+    if (error) { alert('Не вдалося скасувати підписку'); return; }
+    await loadSubscription();
+  });
+
+  document.getElementById('sub-reactivate-btn').addEventListener('click', async () => {
+    const { error } = await supabase.functions.invoke('manage-subscription', {
+      body: { locationId: currentLocationId, action: 'reactivate' },
+    });
+    if (error) { alert('Не вдалося поновити підписку'); return; }
+    await loadSubscription();
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mage Wash — Аналітика</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mage Wash Admin">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+<style>
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
+  .kpi-card{background:var(--panel-bg,#fff);border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:14px;}
+  .kpi-card .kpi-val{font-size:22px;font-weight:700;}
+  .kpi-card .kpi-label{font-size:12px;color:var(--text-2);margin-top:2px;}
+  .range-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+  .range-bar button{padding:6px 12px;border-radius:8px;border:1px solid var(--border,#e5e7eb);background:#fff;font-size:13px;cursor:pointer;}
+  .range-bar button.active{background:var(--accent,#0A1E30);color:#fff;border-color:var(--accent,#0A1E30);}
+  .month-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .month-bar-row .m-label{width:64px;font-size:12px;color:var(--text-2);flex-shrink:0;}
+  .month-bar-track{flex:1;background:#f1f3f5;border-radius:6px;overflow:hidden;height:20px;position:relative;}
+  .month-bar-fill{background:var(--accent,#0A1E30);height:100%;border-radius:6px;}
+  .month-bar-row .m-val{width:90px;text-align:right;font-size:12px;flex-shrink:0;}
+</style>
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>Mage Wash</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <img src="icon-192.png" class="brand-mark" style="object-fit:cover;">
+        <div class="brand-text"><b>Mage Wash</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+        <a class="nav-item" href="payments.html">Посилання на оплату</a>
+        <a class="nav-item" href="reviews.html">Відгуки</a>
+        <a class="nav-item" href="broadcast.html">Розсилка push</a>
+        <a class="nav-item active" href="analytics.html">Аналітика</a>
+        <a class="nav-item" href="subscription.html">Підписка</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+        <a class="nav-item" href="applications.html">Заявки на підключення</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Аналітика та фінанси</h1><div class="sub" id="range-label">—</div></div>
+      </div>
+      <div class="content" id="page-content">
+
+        <div class="range-bar">
+          <button data-range="1" class="active">Місяць</button>
+          <button data-range="3">3 місяці</button>
+          <button data-range="12">Рік</button>
+          <button data-range="all">Весь час</button>
+        </div>
+
+        <div id="loading-line" style="font-size:13px;color:var(--text-2);">Завантаження...</div>
+
+        <div id="analytics-content" style="display:none;">
+          <div class="kpi-grid">
+            <div class="kpi-card"><div class="kpi-val" id="kpi-revenue">—</div><div class="kpi-label">Виручка, грн</div></div>
+            <div class="kpi-card"><div class="kpi-val" id="kpi-done">—</div><div class="kpi-label">Виконано записів</div></div>
+            <div class="kpi-card"><div class="kpi-val" id="kpi-avg-check">—</div><div class="kpi-label">Середній чек, грн</div></div>
+            <div class="kpi-card"><div class="kpi-val" id="kpi-cancelled">—</div><div class="kpi-label">Скасовано</div></div>
+            <div class="kpi-card"><div class="kpi-val" id="kpi-no-show">—</div><div class="kpi-label">Не з'явились</div></div>
+            <div class="kpi-card"><div class="kpi-val" id="kpi-rating">—</div><div class="kpi-label">Середній рейтинг</div></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Виручка по місяцях</h3></div>
+            <div class="panel-body" id="by-month-body">
+              <p style="font-size:13px;color:var(--text-2);">Немає даних за обраний період</p>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Топ послуг</h3></div>
+            <div class="panel-body">
+              <div style="overflow-x:auto;">
+              <table>
+                <thead><tr><th>Послуга</th><th>Кількість</th><th>Виручка, грн</th></tr></thead>
+                <tbody id="top-services-body"></tbody>
+              </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Кешбек</h3></div>
+            <div class="panel-body">
+              <p style="font-size:14px;margin:0 0 4px;">Нараховано: <b id="cashback-accrued">—</b> грн</p>
+              <p style="font-size:14px;margin:0;">Списано клієнтами: <b id="cashback-redeemed">—</b> грн</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentLocationId = null;
+  let currentRange = '1';
+
+  initAdminPage(async (admin, locations, locationId) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+    currentLocationId = locationId;
+    await loadAnalytics();
+  });
+
+  document.querySelectorAll('.range-bar button').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.range-bar button').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentRange = btn.dataset.range;
+      await loadAnalytics();
+    });
+  });
+
+  function rangeToDates(range) {
+    const to = new Date();
+    let from;
+    if (range === 'all') {
+      from = new Date('2020-01-01');
+    } else {
+      from = new Date();
+      from.setMonth(from.getMonth() - Number(range));
+    }
+    return { from, to };
+  }
+
+  function fmt(n) {
+    return Math.round(Number(n) || 0).toLocaleString('uk-UA');
+  }
+
+  async function loadAnalytics() {
+    document.getElementById('loading-line').style.display = 'block';
+    document.getElementById('analytics-content').style.display = 'none';
+
+    const { from, to } = rangeToDates(currentRange);
+    document.getElementById('range-label').textContent =
+      `${from.toLocaleDateString('uk-UA')} — ${to.toLocaleDateString('uk-UA')}`;
+
+    const { data, error } = await supabase.rpc('get_location_analytics', {
+      p_location_id: currentLocationId,
+      p_from: from.toISOString(),
+      p_to: to.toISOString(),
+    });
+
+    document.getElementById('loading-line').style.display = 'none';
+
+    if (error || !data) {
+      document.getElementById('loading-line').style.display = 'block';
+      document.getElementById('loading-line').textContent = 'Не вдалося завантажити аналітику';
+      return;
+    }
+
+    document.getElementById('analytics-content').style.display = 'block';
+
+    document.getElementById('kpi-revenue').textContent = fmt(data.total_revenue);
+    document.getElementById('kpi-done').textContent = data.bookings_done || 0;
+    document.getElementById('kpi-avg-check').textContent = fmt(data.avg_check);
+    document.getElementById('kpi-cancelled').textContent = data.bookings_cancelled || 0;
+    document.getElementById('kpi-no-show').textContent = data.bookings_no_show || 0;
+    document.getElementById('kpi-rating').textContent = data.avg_rating
+      ? `${data.avg_rating} ★ (${data.reviews_count || 0})`
+      : '—';
+
+    document.getElementById('cashback-accrued').textContent = fmt(data.cashback_accrued);
+    document.getElementById('cashback-redeemed').textContent = fmt(Math.abs(data.cashback_redeemed || 0));
+
+    const byMonth = data.by_month || [];
+    const monthBody = document.getElementById('by-month-body');
+    if (byMonth.length === 0) {
+      monthBody.innerHTML = '<p style="font-size:13px;color:var(--text-2);">Немає даних за обраний період</p>';
+    } else {
+      const maxRevenue = Math.max(...byMonth.map((m) => Number(m.revenue) || 0), 1);
+      monthBody.innerHTML = byMonth.map((m) => {
+        const pct = Math.max(4, Math.round((Number(m.revenue) / maxRevenue) * 100));
+        return `
+          <div class="month-bar-row">
+            <div class="m-label">${m.month}</div>
+            <div class="month-bar-track"><div class="month-bar-fill" style="width:${pct}%;"></div></div>
+            <div class="m-val">${fmt(m.revenue)} грн · ${m.count}</div>
+          </div>`;
+      }).join('');
+    }
+
+    const topServices = data.top_services || [];
+    const servicesBody = document.getElementById('top-services-body');
+    if (topServices.length === 0) {
+      servicesBody.innerHTML = '<tr><td colspan="3" style="color:var(--text-2);">Немає даних</td></tr>';
+    } else {
+      servicesBody.innerHTML = topServices.map((s) => `
+        <tr><td>${s.name}</td><td>${s.count}</td><td>${fmt(s.revenue)}</td></tr>
+      `).join('');
+    }
+  }
+</script>
+</body>
+</html>
