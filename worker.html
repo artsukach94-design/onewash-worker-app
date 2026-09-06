@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>One Wash — Сьогодні</title>
+<link rel="icon" type="image/png" href="https://elrmeekxaxcyxdyzqtzg.supabase.co/storage/v1/object/public/location-logos/b1629a66-08aa-48ab-b6c8-ff596732d50e/logo.jpg">
+<link rel="apple-touch-icon" href="https://elrmeekxaxcyxdyzqtzg.supabase.co/storage/v1/object/public/location-logos/b1629a66-08aa-48ab-b6c8-ff596732d50e/logo.jpg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="One Wash">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ФОРМА ЛОГІНУ (показується, якщо мийник не залогінений) -->
+  <div id="login-view" style="display:none;">
+    <div class="login-box">
+      <h1>One Wash</h1>
+      <p>Вхід для мийників</p>
+      <form id="login-form">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="roman@test.com" required>
+        </div>
+        <div class="form-group">
+          <label>Пароль</label>
+          <input type="password" id="login-password" required>
+        </div>
+        <button type="submit" class="submit-btn">Увійти</button>
+        <div class="login-error" id="login-error"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ОСНОВНИЙ ЕКРАН -->
+  <div id="app-view" style="display:none;">
+    <div class="topbar">
+      <div class="topbar-row">
+        <div class="who">
+          <div class="avatar" id="staff-initials">--</div>
+          <div><b id="staff-name">—</b><span>Мийник · One Wash</span></div>
+        </div>
+        <button class="logout-btn" id="logout-btn">Вийти</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="page-h">Сьогодні</div>
+      <div class="page-sub" id="page-sub">Завантаження...</div>
+
+      <div id="checkin-banner" class="push" style="display:none;align-items:center;justify-content:space-between;"></div>
+
+      <div id="push-banner" class="push" style="display:none;align-items:center;justify-content:space-between;cursor:pointer;">
+        <div style="display:flex;gap:10px;align-items:flex-start;">
+          <div class="ic">🔔</div>
+          <div><b id="push-banner-title">Увімкнути сповіщення</b><br><span id="push-banner-sub">Нагадування про записи на завтра, за 2 год і за 30 хв</span></div>
+        </div>
+        <button class="btn btn-sm" id="push-toggle-btn" style="background:var(--cyan-500);border-color:var(--cyan-500);color:#04202F;font-weight:600;white-space:nowrap;">Увімкнути</button>
+      </div>
+
+      <div id="jobs-list"></div>
+    </div>
+  </div>
+
+  <!-- НИЖНЄ МЕНЮ (однакове на всіх сторінках) -->
+  <div class="bottom-nav">
+    <a class="bn-item active" href="worker.html"><span class="ic">◧</span>Сьогодні</a>
+    <a class="bn-item" href="checkin.html"><span class="ic">＋</span>Реєстрація</a>
+    <a class="bn-item" href="calendar.html"><span class="ic">▦</span>Календар</a>
+    <a class="bn-item" href="schedule.html"><span class="ic">📅</span>Мій графік</a>
+  </div>
+
+</div>
+
+<!-- МОДАЛКА ЗАВЕРШЕННЯ МИЙКИ З ВІДЕО -->
+<div id="complete-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.5);align-items:center;justify-content:center;z-index:30;">
+  <div style="background:var(--card);border-radius:14px;padding:20px;width:88%;max-width:340px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <h3 style="margin:0;font-size:15px;">Завершення мийки</h3>
+      <span id="complete-close-x" style="cursor:pointer;font-size:20px;color:var(--text-3);line-height:1;">×</span>
+    </div>
+    <p style="font-size:12px;color:var(--text-2);margin:0 0 14px;">Зніміть коротке відео авто з усіх сторін (до 45 секунд) — це обов'язково для завершення мийки.</p>
+    <input type="file" id="complete-video-input" accept="video/*" capture="environment" style="margin-bottom:10px;">
+    <video id="complete-video-preview" style="width:100%;border-radius:8px;display:none;margin-bottom:10px;" controls></video>
+    <p id="complete-video-error" style="font-size:12px;color:var(--red-600);display:none;margin:0 0 10px;"></p>
+    <button class="submit-btn" id="complete-save-btn" disabled>Завершити мийку</button>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initPage, wireLoginForm, logout, formatTime, formatServicesLabel, subscribeToTable, getPushSubscriptionStatus, enablePushNotifications, disablePushNotifications, isIos, isStandaloneApp } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentStaffForPush = null;
+
+  initPage(async (staff) => {
+    currentStaffForPush = staff;
+    await loadToday(staff);
+    await refreshPushBanner();
+    await refreshCheckinBanner(staff);
+
+    // Realtime: якщо адмін або сайт мийки створить/змінить запис цього мийника —
+    // список оновиться сам, без перезавантаження сторінки
+    subscribeToTable('bookings-today-' + staff.id, 'bookings', `staff_id=eq.${staff.id}`, () => {
+      loadToday(staff);
+    });
+  });
+
+  // ==== "НА РОБОТІ" З ПЕРЕВІРКОЮ ГЕОЛОКАЦІЇ ====
+  // Правильне форматування дати РРРР-ММ-ДД за ЛОКАЛЬНИМ часом (НЕ через toISOString,
+  // який рахує за UTC і зсуває дату на день назад для київського часового поясу)
+  function toLocalDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  async function refreshCheckinBanner(staff) {
+    const banner = document.getElementById('checkin-banner');
+    try {
+      const todayStr = toLocalDateStr(new Date());
+
+      const { data: scheduleRow, error: schedErr } = await supabase
+        .from('staff_schedule_dates')
+        .select('is_working, checked_in_at')
+        .eq('staff_id', staff.id)
+        .eq('work_date', todayStr)
+        .maybeSingle();
+
+      if (schedErr) throw schedErr;
+
+      // якщо графік на сьогодні взагалі не заданий — вважаємо робочим днем за замовчуванням
+      const isWorkingToday = scheduleRow ? scheduleRow.is_working : false;
+
+      if (!isWorkingToday) {
+        banner.style.display = 'none';
+        return;
+      }
+
+      if (scheduleRow?.checked_in_at) {
+        const time = new Date(scheduleRow.checked_in_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+        banner.style.display = 'flex';
+      banner.innerHTML = `<div style="display:flex;gap:10px;align-items:center;"><div class="ic">✅</div><div><b>Ви на роботі</b><br><span style="font-size:11.5px;color:var(--text-2);">Відмічено о ${time}</span></div></div>`;
+      return;
+    }
+
+    banner.style.display = 'flex';
+    banner.innerHTML = `
+      <div style="display:flex;gap:10px;align-items:center;"><div class="ic">📍</div><div><b>Ви на мийці?</b><br><span style="font-size:11.5px;color:var(--text-2);">Натисніть, коли прийдете на роботу</span></div></div>
+      <button class="btn btn-sm" id="checkin-btn" style="background:var(--cyan-500);border-color:var(--cyan-500);color:#04202F;font-weight:600;white-space:nowrap;">На роботі</button>
+    `;
+
+    document.getElementById('checkin-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('checkin-btn');
+      btn.disabled = true;
+      btn.textContent = 'Перевірка...';
+
+      if (!navigator.geolocation) {
+        alert('Цей браузер не підтримує визначення геолокації');
+        btn.disabled = false; btn.textContent = 'На роботі';
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        try {
+          const { data: loc, error: locErr } = await supabase
+            .from('locations').select('latitude, longitude, geofence_radius_meters')
+            .eq('id', staff.location_id).single();
+
+          if (locErr) throw new Error('Помилка читання даних мийки: ' + locErr.message);
+
+          if (!loc?.latitude || !loc?.longitude) {
+            alert('Для цієї мийки ще не вказано геолокацію в адмінці');
+            btn.disabled = false; btn.textContent = 'На роботі';
+            return;
+          }
+
+          const distance = haversineDistanceMeters(pos.coords.latitude, pos.coords.longitude, loc.latitude, loc.longitude);
+          const allowedRadius = loc.geofence_radius_meters || 250;
+
+          if (distance > allowedRadius) {
+            alert(`Схоже, ви ще не на мийці (приблизно ${Math.round(distance)} м від неї). Спробуйте, коли будете на місці.`);
+            btn.disabled = false; btn.textContent = 'На роботі';
+            return;
+          }
+
+          const { error: saveErr } = await supabase.from('staff_schedule_dates').upsert({
+            staff_id: staff.id, work_date: todayStr, is_working: true,
+            checked_in_at: new Date().toISOString(), checkin_distance_meters: Math.round(distance)
+          }, { onConflict: 'staff_id,work_date' });
+
+          if (saveErr) throw new Error('Не вдалося зберегти відмітку: ' + saveErr.message);
+
+          await refreshCheckinBanner(staff);
+
+        } catch (err) {
+          alert('Помилка: ' + (err.message || String(err)));
+          btn.disabled = false; btn.textContent = 'На роботі';
+        }
+      }, (err) => {
+        alert('Не вдалося визначити геолокацію: ' + err.message + ' (код ' + err.code + ')');
+        btn.disabled = false; btn.textContent = 'На роботі';
+      }, { enableHighAccuracy: true, timeout: 15000 });
+    });
+
+    } catch (err) {
+      console.error('Помилка банера "На роботі":', err);
+      banner.style.display = 'flex';
+      banner.innerHTML = `<div style="font-size:12px;color:var(--red-600);"><b>Помилка банера "На роботі":</b><br>${(err && err.message) ? err.message : String(err)}</div>`;
+    }
+  }
+
+  async function refreshPushBanner() {
+    const banner = document.getElementById('push-banner');
+    const title = document.getElementById('push-banner-title');
+    const sub = document.getElementById('push-banner-sub');
+    const btn = document.getElementById('push-toggle-btn');
+
+    const status = await getPushSubscriptionStatus();
+
+    if (status === 'unsupported') {
+      banner.style.display = 'none';
+      return;
+    }
+
+    banner.style.display = 'flex';
+
+    if (status === 'subscribed') {
+      title.textContent = 'Сповіщення увімкнено';
+      sub.textContent = 'Ви отримуватимете нагадування про записи';
+      btn.textContent = 'Вимкнути';
+    } else if (isIos() && !isStandaloneApp()) {
+      title.textContent = 'Увімкнути сповіщення';
+      sub.textContent = 'Спочатку додайте застосунок на головний екран (Поділитися → На головний екран)';
+      btn.textContent = 'Увімкнути';
+    } else {
+      title.textContent = 'Увімкнути сповіщення';
+      sub.textContent = 'Нагадування про записи на завтра, за 2 год і за 30 хв';
+      btn.textContent = 'Увімкнути';
+    }
+  }
+
+  document.getElementById('push-toggle-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('push-toggle-btn');
+    const status = await getPushSubscriptionStatus();
+
+    if (status === 'subscribed') {
+      await disablePushNotifications(currentStaffForPush.id);
+      await refreshPushBanner();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Зачекайте...';
+    try {
+      await enablePushNotifications(currentStaffForPush.id);
+      await refreshPushBanner();
+    } catch (err) {
+      alert(err.message || 'Не вдалося увімкнути сповіщення');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function loadToday(staff) {
+    const jobsList = document.getElementById('jobs-list');
+    const pageSub = document.getElementById('page-sub');
+
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+    const todayStr = toLocalDateStr(startOfDay);
+
+    // чи сьогодні робочий день саме для цього мийника (за замовчуванням — так, якщо не задано)
+    const { data: scheduleRow } = await supabase
+      .from('staff_schedule_dates')
+      .select('is_working')
+      .eq('staff_id', staff.id)
+      .eq('work_date', todayStr)
+      .maybeSingle();
+    const isWorkingToday = scheduleRow ? scheduleRow.is_working : false;
+
+    let query = supabase
+      .from('bookings')
+      .select('*, cars(*), clients(*), wash_types(*), booking_extras(extra_services(name))')
+      .eq('location_id', staff.location_id)
+      .gte('scheduled_at', startOfDay.toISOString())
+      .lte('scheduled_at', endOfDay.toISOString())
+      .in('status', ['pending', 'confirmed', 'in_progress'])
+      .order('scheduled_at');
+
+    // у робочий день бачимо і свої, і непризначені записи мийки; у вихідний — тільки вже свої
+    query = isWorkingToday
+      ? query.or(`staff_id.eq.${staff.id},staff_id.is.null`)
+      : query.eq('staff_id', staff.id);
+
+    const { data: bookings, error } = await query;
+
+    if (error) {
+      pageSub.textContent = 'Помилка завантаження записів';
+      console.error(error);
+      return;
+    }
+
+    if (bookings.length === 0) {
+      pageSub.textContent = 'На сьогодні записів немає';
+      jobsList.innerHTML = '<div class="empty-state">Записів на сьогодні немає</div>';
+      return;
+    }
+
+    pageSub.textContent = `У вас ${bookings.length} записів сьогодні`;
+    jobsList.innerHTML = '';
+    bookings.forEach(b => jobsList.appendChild(renderJobCard(b, staff)));
+  }
+
+  function renderJobCard(b, staff) {
+    const card = document.createElement('div');
+    card.className = 'job-card';
+    card.id = 'job-' + b.id;
+
+    const statusLabel = { pending: 'Не підтверджено', confirmed: 'Заброньовано', in_progress: 'В процесі' }[b.status] || b.status;
+    const pillClass = { pending: 'pending', confirmed: 'confirmed', in_progress: 'progress' }[b.status] || '';
+    const carLabel = b.cars ? `${b.cars.brand_model || 'Авто'} · ${b.cars.plate || '—'}` : 'Авто не вказано';
+    const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
+    const washLabel = formatServicesLabel(b);
+    const unassigned = !b.staff_id;
+
+    let actions = '';
+    if (unassigned) {
+      actions = `<button class="primary btn-take" data-id="${b.id}">Взяти в роботу</button>`;
+    } else if (b.status === 'pending') {
+      actions = `<button class="btn-confirm" data-id="${b.id}">Підтвердити</button>
+                 <button class="danger btn-noshow" data-id="${b.id}">Авто не приїхало</button>`;
+    } else if (b.status === 'confirmed') {
+      actions = `<a href="checkin.html?booking=${b.id}" class="primary" style="flex:1;text-align:center;padding:8px 0;border-radius:8px;font-size:12.5px;font-weight:600;background:var(--cyan-500);color:#04202F;">Авто приїхало</a>
+                 <button class="danger btn-noshow" data-id="${b.id}">Авто не приїхало</button>`;
+    } else if (b.status === 'in_progress') {
+      actions = `<button class="primary btn-complete" data-id="${b.id}">Завершити мийку</button>`;
+    }
+
+    card.innerHTML = `
+      <div class="job-top"><span class="job-time">${formatTime(b.scheduled_at)}</span><span class="pill ${pillClass}">${unassigned ? 'Вільний запис' : statusLabel}</span></div>
+      <p class="job-car"><b>Послуга:</b> ${washLabel}</p>
+      <div class="job-meta"><b>Клієнт:</b> ${clientLabel} ${b.clients?.phone ? `<a href="tel:${b.clients.phone}" style="color:var(--cyan-600);font-weight:700;text-decoration:none;">📞 Подзвонити</a>` : ''}</div>
+      <div class="job-meta"><b>Авто:</b> ${carLabel}</div>
+      <div class="job-actions">${actions}</div>
+    `;
+    return card;
+  }
+
+  // Обробка кліків на кнопках усередині карток (делегування подій)
+  document.getElementById('jobs-list').addEventListener('click', async (e) => {    const id = e.target.dataset.id;
+    if (!id) return;
+    const card = document.getElementById('job-' + id);
+
+    if (e.target.classList.contains('btn-take')) {
+      const { error } = await supabase.from('bookings').update({ staff_id: currentStaffForPush.id }).eq('id', id);
+      if (error) { alert('Не вдалося взяти запис у роботу (можливо, його вже взяв інший мийник)'); }
+      await loadToday(currentStaffForPush);
+      return;
+    }
+
+    if (e.target.classList.contains('btn-noshow')) {
+      await supabase.from('bookings').update({ status: 'no_show' }).eq('id', id);
+      card.classList.add('fading');
+      setTimeout(() => card.remove(), 300);
+    }
+    if (e.target.classList.contains('btn-complete')) {
+      openCompleteModal(id, card);
+    }
+    if (e.target.classList.contains('btn-confirm')) {
+      await supabase.from('bookings').update({ status: 'confirmed' }).eq('id', id);
+      location.reload();
+    }
+  });
+
+  // ==== ЗАВЕРШЕННЯ МИЙКИ З ВІДЕО ====
+  const completeModal = document.getElementById('complete-modal');
+  let completeBookingId = null;
+  let completeCard = null;
+  let completeVideoFile = null;
+  let completeUploadedPath = null; // set once the video is actually on the server — lets a retry skip re-uploading
+
+  function openCompleteModal(bookingId, card) {
+    completeBookingId = bookingId;
+    completeCard = card;
+    completeVideoFile = null;
+    completeUploadedPath = null;
+    document.getElementById('complete-video-input').value = '';
+    document.getElementById('complete-video-preview').style.display = 'none';
+    document.getElementById('complete-video-error').style.display = 'none';
+    document.getElementById('complete-save-btn').disabled = true;
+    document.getElementById('complete-save-btn').textContent = 'Завершити мийку';
+    completeModal.style.display = 'flex';
+  }
+  document.getElementById('complete-close-x').addEventListener('click', () => completeModal.style.display = 'none');
+
+  document.getElementById('complete-video-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    const errorBox = document.getElementById('complete-video-error');
+    const preview = document.getElementById('complete-video-preview');
+    const saveBtn = document.getElementById('complete-save-btn');
+    errorBox.style.display = 'none';
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Завершити мийку';
+    completeVideoFile = null;
+    completeUploadedPath = null; // a different file was picked — any previous upload no longer applies
+
+    if (!file) return;
+
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = 'block';
+    preview.onloadedmetadata = () => {
+      if (preview.duration > 46) {
+        errorBox.textContent = `Відео завелике (${Math.round(preview.duration)} сек) — максимум 45 секунд. Запишіть коротше.`;
+        errorBox.style.display = 'block';
+        preview.style.display = 'none';
+        saveBtn.disabled = true;
+      } else {
+        completeVideoFile = file;
+        saveBtn.disabled = false;
+      }
+    };
+  });
+
+  // Мобільний інтернет у мийному боксі часто нестабільний, тож пробуємо завантажити
+  // відео кілька разів підряд, перш ніж визнати спробу невдалою. Кожна спроба пише у
+  // СВІЙ унікальний шлях (а не перезаписує попередній) — так це завжди звичайний
+  // INSERT, дозволений політикою RLS; для wash-videos немає UPDATE-політики, тож
+  // upsert/перезапис того самого шляху завжди впав би, якщо попередня спроба
+  // насправді долетіла до сервера, а відповідь до телефона — ні.
+  async function uploadVideoWithRetry(file, bookingId, attempts) {
+    const ext = file.name.split('.').pop() || 'mp4';
+    let lastErr = null;
+    for (let i = 0; i < attempts; i++) {
+      const path = `${bookingId}/final-${Date.now()}-${i}.${ext}`;
+      const { error } = await supabase.storage.from('wash-videos').upload(path, file);
+      if (!error) return path;
+      lastErr = error;
+      console.error(`video upload attempt ${i + 1}/${attempts} failed:`, error);
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+    throw lastErr;
+  }
+
+  document.getElementById('complete-save-btn').addEventListener('click', async () => {
+    if (!completeVideoFile || !completeBookingId) return;
+    const btn = document.getElementById('complete-save-btn');
+    const errorBox = document.getElementById('complete-video-error');
+    btn.disabled = true;
+    errorBox.style.display = 'none';
+
+    // Крок 1: завантажити відео у сховище (пропускаємо, якщо попередня спроба вже його залила).
+    if (!completeUploadedPath) {
+      btn.textContent = 'Завантажуємо відео...';
+      try {
+        completeUploadedPath = await uploadVideoWithRetry(completeVideoFile, completeBookingId, 3);
+      } catch (uploadErr) {
+        errorBox.textContent = 'Не вдалося завантажити відео — схоже, слабкий інтернет у боксі. Спробуйте ще раз, файл вибирати заново не потрібно.' +
+          (uploadErr && uploadErr.message ? ` (${uploadErr.message})` : '');
+        errorBox.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Спробувати ще раз';
+        return;
+      }
+    }
+
+    // Крок 2: зберегти запис у базі — відео вже на сервері, лишається тільки записати посилання.
+    try {
+      btn.textContent = 'Зберігаємо...';
+      const preview = document.getElementById('complete-video-preview');
+      const { error: videoRowErr } = await supabase.from('wash_videos').insert({
+        booking_id: completeBookingId,
+        storage_path: completeUploadedPath,
+        duration_seconds: Math.round(preview.duration) || null,
+      });
+      if (videoRowErr) throw videoRowErr;
+
+      const { error: bookingErr } = await supabase.from('bookings').update({
+        status: 'done',
+        completed_at: new Date().toISOString(),
+      }).eq('id', completeBookingId);
+      if (bookingErr) throw bookingErr;
+
+      completeModal.style.display = 'none';
+      completeUploadedPath = null;
+      if (completeCard) {
+        completeCard.classList.add('fading');
+        setTimeout(() => completeCard.remove(), 300);
+      }
+    } catch (err) {
+      console.error('failed to save completed wash:', err);
+      errorBox.textContent = 'Відео вже завантажено, але не вдалося зберегти запис' +
+        (err && err.message ? ` (${err.message})` : '') + '. Натисніть "Спробувати ще раз".';
+      errorBox.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Спробувати ще раз';
+    }
+  });
+</script>
+</body>
+</html>

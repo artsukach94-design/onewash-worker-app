@@ -26,7 +26,7 @@ export async function login(email, password) {
 
 export async function logout() {
   await supabase.auth.signOut();
-  window.location.href = 'index.html';
+  window.location.href = 'worker.html';
 }
 
 // Повертає рядок з таблиці staff, прив'язаний до залогіненого користувача
@@ -116,7 +116,7 @@ function setAppIdentity(locationName, logoUrl) {
   const manifest = {
     name: title,
     short_name: title,
-    start_url: 'index.html',
+    start_url: 'worker.html',
     display: 'standalone',
     background_color: '#0A1E30',
     theme_color: '#0A1E30',

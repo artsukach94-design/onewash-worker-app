@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mage Wash — Лендінг</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mage Wash Admin">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+<style>
+  .feature-block{border:1px solid var(--border,#e5e7eb);border-radius:12px;padding:16px;margin-bottom:14px;background:#fafbfc;}
+  .feature-block .fb-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .feature-block .fb-head b{font-size:13px;color:var(--text-2);}
+  .fb-actions{display:flex;gap:6px;}
+  .fb-actions button{padding:4px 9px;font-size:12px;border-radius:6px;border:1px solid var(--border,#e5e7eb);background:#fff;cursor:pointer;}
+  .fb-img-preview{width:100%;max-width:320px;border-radius:8px;border:1px solid var(--border,#e5e7eb);display:block;margin-bottom:8px;}
+  .fb-img-empty{width:100%;max-width:320px;height:120px;border:1px dashed var(--border,#e5e7eb);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px;margin-bottom:8px;}
+  .save-bar{position:sticky;bottom:0;background:var(--bg,#f5f6f8);padding:14px 0;margin-top:10px;display:flex;gap:10px;align-items:center;}
+</style>
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>Mage Wash</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <img src="icon-192.png" class="brand-mark" style="object-fit:cover;">
+        <div class="brand-text"><b>Mage Wash</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+        <a class="nav-item" href="payments.html">Посилання на оплату</a>
+        <a class="nav-item" href="reviews.html">Відгуки</a>
+        <a class="nav-item" href="broadcast.html">Розсилка push</a>
+        <a class="nav-item" href="analytics.html">Аналітика</a>
+        <a class="nav-item" href="subscription.html">Підписка</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+        <a class="nav-item" href="applications.html">Заявки на підключення</a>
+        <a class="nav-item active" href="landing.html">Лендінг</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Лендінг платформи</h1><div class="sub">Контент публічної сторінки mage-wash.online</div></div>
+        <a href="/" target="_blank" class="btn btn-sm">Переглянути лендінг ↗</a>
+      </div>
+      <div class="content" id="page-content">
+
+        <div id="not-superadmin" class="empty-state" style="display:none;">Цей розділ доступний лише власнику платформи.</div>
+
+        <div id="landing-editor" style="display:none;">
+
+          <div class="panel">
+            <div class="panel-head"><h3>Головний екран (hero)</h3></div>
+            <div class="panel-body">
+              <div class="form-group">
+                <label>Заголовок</label>
+                <input type="text" id="hero-title">
+              </div>
+              <div class="form-group">
+                <label>Підзаголовок</label>
+                <textarea id="hero-subtitle" style="min-height:70px;"></textarea>
+              </div>
+              <div class="form-group">
+                <label>Текст кнопки заявки</label>
+                <input type="text" id="cta-text">
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Блоки функціоналу (скріншот + опис)</h3>
+              <button class="btn btn-sm" id="add-feature-btn" type="button">+ Додати блок</button>
+            </div>
+            <div class="panel-body" id="features-list"></div>
+          </div>
+
+          <div class="save-bar">
+            <button class="btn btn-primary" id="save-landing-btn">Зберегти зміни</button>
+            <span id="save-msg" style="font-size:13px;color:var(--text-2);"></span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let content = { hero_title: '', hero_subtitle: '', cta_text: '', features: [] };
+
+  initAdminPage(async (admin) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+
+    if (!admin.is_superadmin) {
+      document.getElementById('not-superadmin').style.display = 'block';
+      return;
+    }
+    document.getElementById('landing-editor').style.display = 'block';
+    await loadContent();
+  });
+
+  async function loadContent() {
+    const { data, error } = await supabase.from('landing_content').select('content').eq('id', true).maybeSingle();
+    if (!error && data?.content) {
+      content = {
+        hero_title: data.content.hero_title || '',
+        hero_subtitle: data.content.hero_subtitle || '',
+        cta_text: data.content.cta_text || '',
+        features: Array.isArray(data.content.features) ? data.content.features : [],
+      };
+    }
+    document.getElementById('hero-title').value = content.hero_title;
+    document.getElementById('hero-subtitle').value = content.hero_subtitle;
+    document.getElementById('cta-text').value = content.cta_text;
+    renderFeatures();
+  }
+
+  function renderFeatures() {
+    const list = document.getElementById('features-list');
+    if (content.features.length === 0) {
+      list.innerHTML = '<p style="font-size:13px;color:var(--text-2);">Ще немає жодного блоку — додайте перший.</p>';
+      return;
+    }
+    list.innerHTML = content.features.map((f, i) => `
+      <div class="feature-block" data-idx="${i}">
+        <div class="fb-head">
+          <b>Блок ${i + 1}</b>
+          <div class="fb-actions">
+            <button type="button" class="fb-up" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="fb-down" ${i === content.features.length - 1 ? 'disabled' : ''}>↓</button>
+            <button type="button" class="fb-remove" style="color:var(--red-600);">Видалити</button>
+          </div>
+        </div>
+        ${f.image_url
+          ? `<img class="fb-img-preview" src="${f.image_url}">`
+          : `<div class="fb-img-empty">Немає зображення</div>`}
+        <div class="form-group">
+          <label>Скріншот</label>
+          <input type="file" accept="image/*" class="fb-file">
+          <div class="hint" style="font-size:11px;color:var(--text-3);">PNG/JPG, до ~4 МБ.</div>
+        </div>
+        <div class="form-group">
+          <label>Заголовок блоку</label>
+          <input type="text" class="fb-title" value="${(f.title || '').replace(/"/g, '&quot;')}">
+        </div>
+        <div class="form-group">
+          <label>Опис</label>
+          <textarea class="fb-desc" style="min-height:60px;">${f.description || ''}</textarea>
+        </div>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('.feature-block').forEach((block) => {
+      const idx = Number(block.dataset.idx);
+
+      block.querySelector('.fb-title').addEventListener('input', (e) => { content.features[idx].title = e.target.value; });
+      block.querySelector('.fb-desc').addEventListener('input', (e) => { content.features[idx].description = e.target.value; });
+
+      block.querySelector('.fb-remove').addEventListener('click', () => {
+        if (!confirm('Видалити цей блок?')) return;
+        content.features.splice(idx, 1);
+        renderFeatures();
+      });
+      block.querySelector('.fb-up').addEventListener('click', () => {
+        if (idx === 0) return;
+        [content.features[idx - 1], content.features[idx]] = [content.features[idx], content.features[idx - 1]];
+        renderFeatures();
+      });
+      block.querySelector('.fb-down').addEventListener('click', () => {
+        if (idx === content.features.length - 1) return;
+        [content.features[idx + 1], content.features[idx]] = [content.features[idx], content.features[idx + 1]];
+        renderFeatures();
+      });
+
+      block.querySelector('.fb-file').addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const msg = document.getElementById('save-msg');
+        msg.textContent = 'Завантажуємо зображення...';
+        try {
+          const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+          const path = `feature-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+          const { error: upErr } = await supabase.storage.from('landing-images').upload(path, file, {
+            cacheControl: '31536000',
+            contentType: file.type || 'image/jpeg',
+          });
+          if (upErr) throw upErr;
+          const { data: pub } = supabase.storage.from('landing-images').getPublicUrl(path);
+          content.features[idx].image_url = pub.publicUrl;
+          msg.textContent = '';
+          renderFeatures();
+        } catch (err) {
+          console.error(err);
+          msg.textContent = 'Не вдалося завантажити зображення';
+        }
+      });
+    });
+  }
+
+  document.getElementById('add-feature-btn').addEventListener('click', () => {
+    content.features.push({ title: '', description: '', image_url: '' });
+    renderFeatures();
+  });
+
+  document.getElementById('save-landing-btn').addEventListener('click', async () => {
+    content.hero_title = document.getElementById('hero-title').value.trim();
+    content.hero_subtitle = document.getElementById('hero-subtitle').value.trim();
+    content.cta_text = document.getElementById('cta-text').value.trim();
+
+    const msg = document.getElementById('save-msg');
+    msg.textContent = 'Зберігаємо...';
+    const { error } = await supabase.from('landing_content').update({ content }).eq('id', true);
+    msg.textContent = error ? 'Не вдалося зберегти' : 'Збережено ✓';
+    if (!error) setTimeout(() => { msg.textContent = ''; }, 2500);
+  });
+</script>
+</body>
+</html>

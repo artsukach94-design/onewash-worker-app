@@ -23,7 +23,7 @@ self.addEventListener('push', (event) => {
     body: data.body || '',
     icon: data.icon || 'icon-v2-192.png',
     badge: data.badge || 'icon-v2-192.png',
-    data: { url: data.url || 'index.html' },
+    data: { url: data.url || 'worker.html' },
     vibrate: [100, 50, 100]
   };
 
@@ -32,7 +32,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || 'index.html';
+  const targetUrl = event.notification.data?.url || 'worker.html';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
