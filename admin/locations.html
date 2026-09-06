@@ -244,6 +244,10 @@
     const accessCount = {};
     (accessRows || []).forEach(r => { accessCount[r.location_id] = (accessCount[r.location_id] || 0) + 1; });
 
+    const { data: subRows } = await supabase.from('platform_subscriptions').select('*');
+    const subByLocation = {};
+    (subRows || []).forEach(s => { subByLocation[s.location_id] = s; });
+
     const list = document.getElementById('locations-list');
     if (locations.length === 0) {
       list.innerHTML = '<div class="empty-state">Мийок ще немає</div>';
@@ -252,6 +256,7 @@
 
     list.innerHTML = '';
     locations.forEach(loc => {
+      const sub = subByLocation[loc.id] || null;
       const panel = document.createElement('div');
       panel.className = 'panel';
       panel.innerHTML = `
@@ -262,13 +267,100 @@
             <button class="btn btn-sm manage-admins-btn" data-id="${loc.id}" data-name="${loc.name}">Керувати адмінами</button>
           </div>
         </div>
+        <div class="panel-body" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+          <div style="font-size:12.5px;color:var(--text-2);">
+            ${renderSubStatus(loc, sub)}
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm extend-sub-btn" data-id="${loc.id}">Продовжити на місяць (без оплати)</button>
+            ${sub?.manually_blocked
+              ? `<button class="btn btn-sm unblock-loc-btn" data-id="${loc.id}" style="color:var(--green-600);">Зняти блокування</button>`
+              : `<button class="btn btn-sm block-loc-btn" data-id="${loc.id}" style="color:var(--red-600);">Заблокувати мийку</button>`}
+          </div>
+        </div>
       `;
       list.appendChild(panel);
+    });
+
+    document.querySelectorAll('.extend-sub-btn').forEach(btn => {
+      btn.addEventListener('click', () => extendSubscription(btn.dataset.id));
+    });
+    document.querySelectorAll('.block-loc-btn').forEach(btn => {
+      btn.addEventListener('click', () => blockLocation(btn.dataset.id, true));
+    });
+    document.querySelectorAll('.unblock-loc-btn').forEach(btn => {
+      btn.addEventListener('click', () => blockLocation(btn.dataset.id, false));
     });
 
     document.querySelectorAll('.manage-admins-btn').forEach(btn => {
       btn.addEventListener('click', () => openAdminsModal(btn.dataset.id, btn.dataset.name));
     });
+  }
+
+  // ==== РУЧНЕ КЕРУВАННЯ ПІДПИСКОЮ (продовжити без оплати / заблокувати) ====
+  function renderSubStatus(loc, sub) {
+    if (sub?.manually_blocked) {
+      return `<span style="color:var(--red-600);font-weight:600;">🔒 Заблоковано вручну</span>` +
+        (loc.is_published ? '' : ' · невидима клієнтам');
+    }
+    if (!sub) {
+      return `Підписки ще немає${loc.is_published ? ' · зараз видима клієнтам' : ' · невидима клієнтам'}`;
+    }
+    const dateLabel = sub.next_charge_date
+      ? new Date(sub.next_charge_date).toLocaleDateString('uk-UA')
+      : '—';
+    if (sub.status === 'active') {
+      return `Підписка активна до <b>${dateLabel}</b>`;
+    }
+    if (sub.status === 'past_due') {
+      return `<span style="color:var(--red-600);">Прострочено</span> — невидима клієнтам`;
+    }
+    return `Очікує першої оплати — невидима клієнтам`;
+  }
+
+  async function extendSubscription(locationId) {
+    if (!confirm('Продовжити підписку цієї мийки ще на місяць БЕЗ реальної оплати?')) return;
+
+    const { data: existing } = await supabase
+      .from('platform_subscriptions').select('*').eq('location_id', locationId).maybeSingle();
+
+    const base = existing?.next_charge_date && new Date(existing.next_charge_date) > new Date()
+      ? new Date(existing.next_charge_date)
+      : new Date();
+    base.setMonth(base.getMonth() + 1);
+    const nextChargeDate = base.toISOString().slice(0, 10);
+
+    if (existing) {
+      await supabase.from('platform_subscriptions').update({
+        status: 'active', next_charge_date: nextChargeDate, grace_started_at: null, manually_blocked: false,
+      }).eq('id', existing.id);
+    } else {
+      await supabase.from('platform_subscriptions').insert({
+        location_id: locationId, status: 'active', amount: 1000, next_charge_date: nextChargeDate,
+      });
+    }
+    await supabase.from('locations').update({ is_published: true }).eq('id', locationId);
+    await loadLocations();
+  }
+
+  async function blockLocation(locationId, block) {
+    const question = block
+      ? 'Заблокувати цю мийку прямо зараз? Вона одразу зникне з застосунку для клієнтів, навіть якщо оплачений період ще триває.'
+      : 'Зняти блокування і знову показати мийку клієнтам?';
+    if (!confirm(question)) return;
+
+    const { data: existing } = await supabase
+      .from('platform_subscriptions').select('id').eq('location_id', locationId).maybeSingle();
+
+    if (existing) {
+      await supabase.from('platform_subscriptions').update({ manually_blocked: block }).eq('id', existing.id);
+    } else if (block) {
+      await supabase.from('platform_subscriptions').insert({
+        location_id: locationId, status: 'pending_first_payment', amount: 1000, manually_blocked: true,
+      });
+    }
+    await supabase.from('locations').update({ is_published: !block }).eq('id', locationId);
+    await loadLocations();
   }
 
   document.getElementById('add-location-btn').addEventListener('click', async () => {
