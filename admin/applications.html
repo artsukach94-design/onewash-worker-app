@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mage Wash — Заявки на підключення</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mage Wash Admin">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>Mage Wash</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <img src="icon-192.png" class="brand-mark" style="object-fit:cover;">
+        <div class="brand-text"><b>Mage Wash</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+        <a class="nav-item" href="payments.html">Посилання на оплату</a>
+        <a class="nav-item" href="reviews.html">Відгуки</a>
+        <a class="nav-item" href="broadcast.html">Розсилка push</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+        <a class="nav-item active" href="applications.html">Заявки на підключення</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Заявки на підключення мийок</h1><div class="sub">Тільки для суперадміна</div></div>
+      </div>
+      <div class="content" id="page-content">
+        <div id="not-superadmin" class="empty-state" style="display:none;">Цей розділ доступний лише власнику платформи.</div>
+
+        <div class="panel" id="pending-panel" style="display:none;">
+          <div class="panel-head"><h3>Нові заявки</h3></div>
+          <div class="panel-body" style="padding:0;">
+            <table>
+              <tbody id="pending-list"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel" id="processed-panel" style="display:none;">
+          <div class="panel-head"><h3>Оброблені заявки</h3></div>
+          <div class="panel-body" style="padding:0;">
+            <table>
+              <tbody id="processed-list"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА СХВАЛЕННЯ -->
+<div id="approve-modal" style="display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:20;">
+  <div style="background:var(--card);border-radius:12px;padding:20px;width:min(400px,92vw);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <h3 style="margin:0;font-size:15px;">Схвалити заявку</h3>
+      <span id="ap-close-x" style="cursor:pointer;font-size:20px;color:var(--text-3);line-height:1;">×</span>
+    </div>
+    <p style="margin:8px 0 14px;font-size:12.5px;color:var(--text-2);">
+      Буде створено мийку "<b id="ap-business-name">—</b>", підписку на 1000 грн/міс (неактивна, поки партнер не оплатить)
+      і перший обліковий запис адміна цієї мийки.
+    </p>
+    <div class="form-group"><label>Email для входу адміна мийки</label><input type="email" id="ap-admin-email" placeholder="owner@example.com"></div>
+    <div class="form-group">
+      <label>Пароль</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="ap-admin-password" style="flex:1;">
+        <button class="btn btn-sm" type="button" id="ap-regen-pw" title="Згенерувати новий">↻</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn" style="flex:1;" id="ap-cancel">Скасувати</button>
+      <button class="btn btn-primary" style="flex:1;" id="ap-confirm">Створити й схвалити</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout, formatTime, createAuthUser, generatePassword } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentAdmin = null;
+  let applications = [];
+  let approvingAppId = null;
+
+  initAdminPage(async (admin) => {
+    currentAdmin = admin;
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+
+    if (!admin.is_superadmin) {
+      document.getElementById('not-superadmin').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('pending-panel').style.display = 'block';
+    document.getElementById('processed-panel').style.display = 'block';
+    await loadApplications();
+  });
+
+  async function loadApplications() {
+    const { data, error } = await supabase
+      .from('location_applications')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) { console.error(error); return; }
+    applications = data || [];
+    renderPending();
+    renderProcessed();
+  }
+
+  function contactCell(a) {
+    return `${a.contact_full_name}<br><span style="color:var(--text-2);font-size:11.5px;">${a.contact_phone}${a.contact_email ? ' · ' + a.contact_email : ''}</span>`;
+  }
+
+  function renderPending() {
+    const pending = applications.filter(a => a.status === 'pending');
+    const box = document.getElementById('pending-list');
+    if (pending.length === 0) {
+      box.innerHTML = '<tr><td class="empty-state">Нових заявок немає</td></tr>';
+      return;
+    }
+    box.innerHTML = '';
+    pending.forEach(a => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><b>${a.business_name}</b><br><span style="color:var(--text-2);font-size:11.5px;">${a.city}</span></td>
+        <td>${contactCell(a)}</td>
+        <td style="color:var(--text-2);font-size:12px;">${formatTime(a.created_at)}<br>${new Date(a.created_at).toLocaleDateString('uk-UA')}</td>
+        <td>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-sm btn-primary" data-approve="${a.id}">Схвалити</button>
+            <button class="btn btn-sm" style="color:var(--red-600);" data-reject="${a.id}">Відхилити</button>
+          </div>
+        </td>
+      `;
+      box.appendChild(row);
+    });
+
+    box.querySelectorAll('[data-approve]').forEach(btn => {
+      btn.addEventListener('click', () => openApproveModal(btn.dataset.approve));
+    });
+    box.querySelectorAll('[data-reject]').forEach(btn => {
+      btn.addEventListener('click', () => rejectApplication(btn.dataset.reject));
+    });
+  }
+
+  function renderProcessed() {
+    const processed = applications.filter(a => a.status !== 'pending');
+    const box = document.getElementById('processed-list');
+    if (processed.length === 0) {
+      box.innerHTML = '<tr><td class="empty-state">Ще немає оброблених заявок</td></tr>';
+      return;
+    }
+    box.innerHTML = '';
+    processed.forEach(a => {
+      const badge = a.status === 'approved'
+        ? '<span class="pay-badge paid">Схвалено</span>'
+        : '<span class="pay-badge unpaid">Відхилено</span>';
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><b>${a.business_name}</b><br><span style="color:var(--text-2);font-size:11.5px;">${a.city}</span></td>
+        <td>${contactCell(a)}</td>
+        <td>${badge}${a.rejection_reason ? `<br><span style="color:var(--text-2);font-size:11px;">${a.rejection_reason}</span>` : ''}</td>
+      `;
+      box.appendChild(row);
+    });
+  }
+
+  function openApproveModal(appId) {
+    approvingAppId = appId;
+    const app = applications.find(a => a.id === appId);
+    document.getElementById('ap-business-name').textContent = app.business_name;
+    document.getElementById('ap-admin-email').value = app.contact_email || '';
+    document.getElementById('ap-admin-password').value = generatePassword();
+    document.getElementById('approve-modal').style.display = 'flex';
+  }
+  document.getElementById('ap-close-x').addEventListener('click', () => document.getElementById('approve-modal').style.display = 'none');
+  document.getElementById('ap-cancel').addEventListener('click', () => document.getElementById('approve-modal').style.display = 'none');
+  document.getElementById('ap-regen-pw').addEventListener('click', () => {
+    document.getElementById('ap-admin-password').value = generatePassword();
+  });
+
+  document.getElementById('ap-confirm').addEventListener('click', async () => {
+    const app = applications.find(a => a.id === approvingAppId);
+    const email = document.getElementById('ap-admin-email').value.trim();
+    const password = document.getElementById('ap-admin-password').value;
+    if (!email || !password) { alert('Вкажіть email і пароль'); return; }
+    if (password.length < 6) { alert('Пароль має бути мінімум 6 символів'); return; }
+
+    const btn = document.getElementById('ap-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Створюємо...';
+
+    try {
+      // 1. сама мийка — is_published:false, поки не оплатить підписку
+      const { data: location, error: locErr } = await supabase
+        .from('locations')
+        .insert({ name: app.business_name, city: app.city, is_published: false })
+        .select().single();
+      if (locErr) throw locErr;
+
+      // 2. підписка — неактивна, чекає першої оплати
+      const { error: subErr } = await supabase
+        .from('platform_subscriptions')
+        .insert({ location_id: location.id, status: 'pending_first_payment', amount: 1000 });
+      if (subErr) throw subErr;
+
+      // 3. обліковий запис адміна мийки
+      const authUserId = await createAuthUser(email, password);
+      const { data: newAdmin, error: adminErr } = await supabase
+        .from('platform_admins')
+        .insert({ auth_user_id: authUserId, full_name: app.contact_full_name, is_superadmin: false })
+        .select().single();
+      if (adminErr) throw adminErr;
+
+      const { error: accessErr } = await supabase
+        .from('admin_location_access')
+        .insert({ admin_id: newAdmin.id, location_id: location.id });
+      if (accessErr) throw accessErr;
+
+      // 4. позначаємо заявку опрацьованою
+      await supabase.from('location_applications').update({
+        status: 'approved', location_id: location.id,
+        reviewed_by: currentAdmin.id, reviewed_at: new Date().toISOString(),
+      }).eq('id', app.id);
+
+      document.getElementById('approve-modal').style.display = 'none';
+      alert(
+        `Мийку "${app.business_name}" створено.\n\nПередайте власнику дані для входу в адмінку:\nEmail: ${email}\nПароль: ${password}\n\n` +
+        `Мийка ще НЕ видима клієнтам — з'явиться в застосунку автоматично, щойно партнер оплатить першу підписку (1000 грн/міс) у своїй адмінці.`
+      );
+      await loadApplications();
+
+    } catch (err) {
+      console.error(err);
+      alert('Помилка схвалення: ' + (err.message || 'спробуйте ще раз'));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Створити й схвалити';
+    }
+  });
+
+  async function rejectApplication(appId) {
+    const reason = prompt('Причина відхилення (необов\'язково):') || null;
+    const { error } = await supabase.from('location_applications').update({
+      status: 'rejected', rejection_reason: reason,
+      reviewed_by: currentAdmin.id, reviewed_at: new Date().toISOString(),
+    }).eq('id', appId);
+    if (error) { console.error(error); alert('Помилка відхилення'); return; }
+    await loadApplications();
+  }
+</script>
+</body>
+</html>

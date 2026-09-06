@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Підключити мийку — Mage Wash</title>
+<style>
+  :root{
+    --navy:#0A1E30; --teal:#20C7B7; --tealDeep:#129C90;
+    --text1:#16232F; --text2:#5B6B7C; --text3:#93A2AF;
+    --border:#E2E8F0; --bg:#F3F6F9; --card:#FFFFFF;
+  }
+  body{margin:0;background:var(--bg);color:var(--text1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;}
+  .wrap{max-width:520px;margin:0 auto;padding:48px 20px 80px;}
+  .head{text-align:center;margin-bottom:28px;}
+  .head h1{font-size:22px;margin:0 0 8px;color:var(--navy);}
+  .head p{font-size:13.5px;color:var(--text2);line-height:1.6;margin:0;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;}
+  .form-group{margin-bottom:14px;}
+  .form-group label{display:block;font-size:12.5px;font-weight:600;color:var(--text2);margin-bottom:5px;}
+  .form-group .hint{font-size:11px;color:var(--text3);margin-top:4px;}
+  input, textarea{
+    width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;
+    font-size:13.5px;font-family:inherit;color:var(--text1);background:#FCFDFE;
+  }
+  textarea{min-height:70px;resize:vertical;}
+  .submit-btn{width:100%;padding:13px;border:none;border-radius:11px;background:var(--teal);color:#04202F;font-weight:700;font-size:14.5px;margin-top:8px;cursor:pointer;}
+  .submit-btn:disabled{background:#C9DCE6;color:#7C93A0;cursor:not-allowed;}
+  .msg{font-size:13px;text-align:center;margin-top:14px;}
+  .msg.error{color:#D64545;}
+  .msg.success{color:var(--tealDeep);}
+  .done-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px 24px;text-align:center;}
+  .done-ic{width:56px;height:56px;border-radius:50%;background:#E4F5EB;color:#2F9E62;font-size:26px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+  /* Пастка для ботів — приховане поле, справжній користувач його ніколи не заповнить */
+  .hp{position:absolute;left:-9999px;opacity:0;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1>Підключити мийку до Mage Wash</h1>
+      <p>Заповніть заявку — ми розглянемо її вручну і зв'яжемось з вами для підключення.<br>Єдиний тариф: 1000 грн/міс.</p>
+    </div>
+
+    <div class="card" id="form-card">
+      <form id="apply-form">
+        <div class="form-group">
+          <label>Назва мийки *</label>
+          <input type="text" id="business-name" required placeholder="Наприклад, CleanCar">
+        </div>
+        <div class="form-group">
+          <label>Місто *</label>
+          <input type="text" id="city" required placeholder="Тернопіль">
+        </div>
+        <div class="form-group">
+          <label>Ваше ім'я *</label>
+          <input type="text" id="contact-name" required placeholder="Ім'я та прізвище">
+        </div>
+        <div class="form-group">
+          <label>Телефон *</label>
+          <input type="tel" id="contact-phone" required placeholder="+380971112233">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="contact-email" placeholder="you@example.com">
+        </div>
+        <div class="form-group">
+          <label>ФОП / ТОВ (за наявності)</label>
+          <input type="text" id="legal-entity" placeholder="ФОП Іваненко І.І.">
+        </div>
+        <div class="form-group">
+          <label>Коментар</label>
+          <textarea id="notes" placeholder="Кількість боксів, орієнтовний графік роботи тощо"></textarea>
+        </div>
+        <input type="text" id="website" class="hp" tabindex="-1" autocomplete="off">
+
+        <button type="submit" class="submit-btn" id="submit-btn">Надіслати заявку</button>
+        <div class="msg" id="form-msg"></div>
+      </form>
+    </div>
+
+    <div class="done-card" id="done-card" style="display:none;">
+      <div class="done-ic">✓</div>
+      <h1 style="font-size:17px;">Заявку надіслано</h1>
+      <p style="font-size:13px;color:var(--text2);line-height:1.6;">Ми розглянемо її і зв'яжемось із вами за вказаним телефоном або email.</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+    const SUPABASE_URL = 'https://elrmeekxaxcyxdyzqtzg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVscm1lZWt4YXhjeXhkeXpxdHpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MDA4MTIsImV4cCI6MjA5OTE3NjgxMn0.XfLB_ZPMbnnlK-TJX05vVipk6XxZPZlq95sbIAwDwFs';
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    document.getElementById('apply-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      // Проста пастка для ботів: приховане поле, яке справжній відвідувач не бачить і не заповнює
+      if (document.getElementById('website').value.trim()) return;
+
+      const btn = document.getElementById('submit-btn');
+      const msg = document.getElementById('form-msg');
+      btn.disabled = true;
+      btn.textContent = 'Надсилаємо...';
+      msg.textContent = '';
+      msg.className = 'msg';
+
+      const businessName = document.getElementById('business-name').value.trim();
+      const city = document.getElementById('city').value.trim();
+      const contactName = document.getElementById('contact-name').value.trim();
+      const contactPhone = document.getElementById('contact-phone').value.trim();
+      const contactEmail = document.getElementById('contact-email').value.trim();
+      const legalEntity = document.getElementById('legal-entity').value.trim();
+      const notes = document.getElementById('notes').value.trim();
+
+      if (!businessName || !city || !contactName || !contactPhone) {
+        msg.textContent = 'Заповніть усі обов\'язкові поля';
+        msg.className = 'msg error';
+        btn.disabled = false;
+        btn.textContent = 'Надіслати заявку';
+        return;
+      }
+
+      const { error } = await supabase.from('location_applications').insert({
+        business_name: businessName,
+        city,
+        contact_full_name: contactName,
+        contact_phone: contactPhone,
+        contact_email: contactEmail || null,
+        legal_entity_name: legalEntity || null,
+        notes: notes || null,
+      });
+
+      if (error) {
+        console.error(error);
+        msg.textContent = 'Не вдалося надіслати заявку. Спробуйте ще раз.';
+        msg.className = 'msg error';
+        btn.disabled = false;
+        btn.textContent = 'Надіслати заявку';
+        return;
+      }
+
+      document.getElementById('form-card').style.display = 'none';
+      document.getElementById('done-card').style.display = 'block';
+    });
+  </script>
+</body>
+</html>
