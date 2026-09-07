@@ -21,8 +21,8 @@
   /* Header */
   .site-header{position:sticky;top:0;background:rgba(243,246,249,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);z-index:10;}
   .site-header .row{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;max-width:1080px;margin:0 auto;}
-  .brand{display:flex;align-items:center;}
-  .brand img{height:34px;width:auto;display:block;border-radius:6px;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:16px;color:var(--navy);}
+  .brand img{height:36px;width:36px;object-fit:cover;border-radius:10px;display:block;}
   .header-cta{background:var(--navy);color:#fff;padding:9px 18px;border-radius:10px;font-size:13.5px;font-weight:600;text-decoration:none;white-space:nowrap;}
 
   /* Hero */
@@ -77,12 +77,11 @@
   @media (max-width:480px){
     .site-header .row{padding:12px 16px;gap:10px;flex-wrap:wrap;}
     .header-cta{padding:9px 14px;font-size:12.5px;}
-    .container{padding:0 22px;}
+    .container{padding:0 28px;}
     .hero{padding:40px 0 40px;}
     .hero h1{font-size:24px;margin:0 0 14px;}
-    .hero p{font-size:14.5px;margin:0 0 24px;}
-    .hero-actions{flex-direction:column;align-items:stretch;}
-    .btn-primary,.btn-secondary{width:100%;text-align:center;padding:13px 20px;}
+    .hero p{font-size:14.5px;margin:0 0 24px;max-width:88%;}
+    .apply-head p{max-width:88%;margin-left:auto;margin-right:auto;}
     .apply-head h2{font-size:22px;}
     .card{padding:20px 18px;}
   }
@@ -92,7 +91,7 @@
 
   <header class="site-header">
     <div class="row">
-      <div class="brand"><img src="logo-header.png" alt="Mage Wash"></div>
+      <div class="brand"><img src="admin/icon-192.png" alt=""> Mage Wash</div>
       <a href="#apply" class="header-cta" id="header-cta-btn">Підключити мийку</a>
     </div>
   </header>
