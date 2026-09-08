@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mage Wash — Фінанси платформи</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mage Wash Admin">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+<style>
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px;}
+  .kpi-card{background:var(--panel-bg,#fff);border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:14px;}
+  .kpi-card .kpi-val{font-size:22px;font-weight:700;}
+  .kpi-card .kpi-label{font-size:12px;color:var(--text-2);margin-top:2px;}
+  .kpi-card.warn .kpi-val{color:var(--red-600);}
+  .range-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+  .range-bar button{padding:6px 12px;border-radius:8px;border:1px solid var(--border,#e5e7eb);background:#fff;font-size:13px;cursor:pointer;}
+  .range-bar button.active{background:var(--accent,#0A1E30);color:#fff;border-color:var(--accent,#0A1E30);}
+  .month-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .month-bar-row .m-label{width:64px;font-size:12px;color:var(--text-2);flex-shrink:0;}
+  .month-bar-track{flex:1;background:#f1f3f5;border-radius:6px;overflow:hidden;height:20px;}
+  .month-bar-fill{background:var(--accent,#0A1E30);height:100%;border-radius:6px;}
+  .month-bar-row .m-val{width:110px;text-align:right;font-size:12px;flex-shrink:0;}
+  .sub-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11.5px;font-weight:600;}
+  .sub-badge.active{background:#E4F5EB;color:#2F9E62;}
+  .sub-badge.past_due{background:#FCE9E9;color:#D64545;}
+  .sub-badge.canceled{background:#F1E9FC;color:#7C4FD6;}
+  .sub-badge.pending_first_payment{background:#FFF4DE;color:#B4740A;}
+  .sub-badge.none{background:#F1F3F5;color:var(--text-2);}
+  .sub-badge.blocked{background:#2b2b2b;color:#fff;}
+</style>
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>Mage Wash</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <img src="icon-192.png" class="brand-mark" style="object-fit:cover;">
+        <div class="brand-text"><b>Mage Wash</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+        <a class="nav-item" href="payments.html">Посилання на оплату</a>
+        <a class="nav-item" href="reviews.html">Відгуки</a>
+        <a class="nav-item" href="broadcast.html">Розсилка push</a>
+        <a class="nav-item" href="analytics.html">Аналітика</a>
+        <a class="nav-item" href="subscription.html">Підписка</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+        <a class="nav-item" href="applications.html">Заявки на підключення</a>
+        <a class="nav-item" href="landing.html">Лендінг</a>
+        <a class="nav-item" href="subscription-payments.html">Оплати підписок</a>
+        <a class="nav-item active" href="platform-finance.html">Фінанси платформи</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Фінанси платформи</h1><div class="sub" id="range-label">По всіх мийках</div></div>
+      </div>
+      <div class="content" id="page-content">
+
+        <div id="not-superadmin" class="empty-state" style="display:none;">Цей розділ доступний лише власнику платформи.</div>
+
+        <div id="finance-panel" style="display:none;">
+
+          <div class="range-bar">
+            <button data-range="1">Місяць</button>
+            <button data-range="3">3 місяці</button>
+            <button data-range="12" class="active">Рік</button>
+            <button data-range="all">Весь час</button>
+          </div>
+
+          <div id="loading-line" style="font-size:13px;color:var(--text-2);">Завантаження...</div>
+
+          <div id="finance-content" style="display:none;">
+
+            <div class="kpi-grid">
+              <div class="kpi-card"><div class="kpi-val" id="kpi-mrr">—</div><div class="kpi-label">MRR (щомісячно очікується), грн</div></div>
+              <div class="kpi-card"><div class="kpi-val" id="kpi-collected">—</div><div class="kpi-label">Зібрано за період, грн</div></div>
+              <div class="kpi-card"><div class="kpi-val" id="kpi-active">—</div><div class="kpi-label">Активних підписок</div></div>
+              <div class="kpi-card warn"><div class="kpi-val" id="kpi-past-due">—</div><div class="kpi-label">Прострочено</div></div>
+              <div class="kpi-card"><div class="kpi-val" id="kpi-canceled">—</div><div class="kpi-label">Скасовано</div></div>
+              <div class="kpi-card warn"><div class="kpi-val" id="kpi-stuck">—</div><div class="kpi-label">Зависли платежі</div></div>
+              <div class="kpi-card"><div class="kpi-val" id="kpi-gmv">—</div><div class="kpi-label">Оборот усіх мийок (GMV), грн</div></div>
+              <div class="kpi-card"><div class="kpi-val" id="kpi-bookings">—</div><div class="kpi-label">Виконано записів усього</div></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h3>Зібрана оплата підписок по місяцях</h3></div>
+              <div class="panel-body" id="by-month-body">
+                <p style="font-size:13px;color:var(--text-2);">Немає даних за обраний період</p>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h3>Мийки — статус підписки й оборот за період</h3></div>
+              <div class="panel-body">
+                <div style="overflow-x:auto;">
+                <table>
+                  <thead><tr><th>Мийка</th><th>Підписка</th><th>Наступне списання</th><th>Оборот, грн</th><th>Записів</th></tr></thead>
+                  <tbody id="locations-body"></tbody>
+                </table>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  let currentRange = '12';
+
+  initAdminPage(async (admin) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+
+    if (!admin.is_superadmin) {
+      document.getElementById('not-superadmin').style.display = 'block';
+      return;
+    }
+    document.getElementById('finance-panel').style.display = 'block';
+    await loadFinance();
+  }, { skipSubscriptionBanner: true });
+
+  document.querySelectorAll('.range-bar button').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.range-bar button').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentRange = btn.dataset.range;
+      await loadFinance();
+    });
+  });
+
+  function rangeToDates(range) {
+    const to = new Date();
+    let from;
+    if (range === 'all') {
+      from = new Date('2020-01-01');
+    } else {
+      from = new Date();
+      from.setMonth(from.getMonth() - Number(range));
+    }
+    return { from, to };
+  }
+
+  function fmt(n) {
+    return Math.round(Number(n) || 0).toLocaleString('uk-UA');
+  }
+
+  const SUB_LABEL = {
+    active: 'Активна', past_due: 'Прострочена', canceled: 'Скасована',
+    pending_first_payment: 'Очікує оплати', null: 'Немає',
+  };
+
+  async function loadFinance() {
+    document.getElementById('loading-line').style.display = 'block';
+    document.getElementById('finance-content').style.display = 'none';
+
+    const { from, to } = rangeToDates(currentRange);
+    document.getElementById('range-label').textContent =
+      `По всіх мийках · ${from.toLocaleDateString('uk-UA')} — ${to.toLocaleDateString('uk-UA')}`;
+
+    const { data, error } = await supabase.rpc('get_platform_analytics', {
+      p_from: from.toISOString(),
+      p_to: to.toISOString(),
+    });
+
+    document.getElementById('loading-line').style.display = 'none';
+
+    if (error || !data) {
+      document.getElementById('loading-line').style.display = 'block';
+      document.getElementById('loading-line').textContent = 'Не вдалося завантажити фінансову аналітику';
+      return;
+    }
+
+    document.getElementById('finance-content').style.display = 'block';
+
+    document.getElementById('kpi-mrr').textContent = fmt(data.mrr);
+    document.getElementById('kpi-collected').textContent = fmt(data.subscription_revenue_collected);
+    document.getElementById('kpi-active').textContent = data.active_count || 0;
+    document.getElementById('kpi-past-due').textContent = data.past_due_count || 0;
+    document.getElementById('kpi-canceled').textContent = data.canceled_count || 0;
+    document.getElementById('kpi-stuck').textContent = data.stuck_payments_count || 0;
+    document.getElementById('kpi-gmv').textContent = fmt(data.total_gmv);
+    document.getElementById('kpi-bookings').textContent = data.total_bookings_done || 0;
+
+    const byMonth = data.subscription_revenue_by_month || [];
+    const monthBody = document.getElementById('by-month-body');
+    if (byMonth.length === 0) {
+      monthBody.innerHTML = '<p style="font-size:13px;color:var(--text-2);">Немає даних за обраний період</p>';
+    } else {
+      const maxRevenue = Math.max(...byMonth.map((m) => Number(m.revenue) || 0), 1);
+      monthBody.innerHTML = byMonth.map((m) => {
+        const pct = Math.max(4, Math.round((Number(m.revenue) / maxRevenue) * 100));
+        return `
+          <div class="month-bar-row">
+            <div class="m-label">${m.month}</div>
+            <div class="month-bar-track"><div class="month-bar-fill" style="width:${pct}%;"></div></div>
+            <div class="m-val">${fmt(m.revenue)} грн · ${m.count}</div>
+          </div>`;
+      }).join('');
+    }
+
+    const locations = data.locations || [];
+    const locBody = document.getElementById('locations-body');
+    if (locations.length === 0) {
+      locBody.innerHTML = '<tr><td colspan="5" style="color:var(--text-2);">Немає мийок</td></tr>';
+    } else {
+      locBody.innerHTML = locations.map((l) => {
+        const badgeClass = l.manually_blocked ? 'blocked' : (l.sub_status || 'none');
+        const badgeLabel = l.manually_blocked ? 'Заблоковано' : (SUB_LABEL[l.sub_status] || 'Немає');
+        const dateLabel = l.next_charge_date ? new Date(l.next_charge_date).toLocaleDateString('uk-UA') : '—';
+        return `
+          <tr>
+            <td>${l.name}</td>
+            <td><span class="sub-badge ${badgeClass}">${badgeLabel}</span></td>
+            <td>${dateLabel}</td>
+            <td>${fmt(l.revenue)}</td>
+            <td>${l.bookings_done}</td>
+          </tr>`;
+      }).join('');
+    }
+  }
+</script>
+</body>
+</html>
