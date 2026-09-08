@@ -56,6 +56,7 @@
         <a class="nav-item" href="locations.html">Мийки-клієнти</a>
         <a class="nav-item" href="applications.html">Заявки на підключення</a>
         <a class="nav-item" href="landing.html">Лендінг</a>
+        <a class="nav-item" href="subscription-payments.html">Оплати підписок</a>
       </div>
 
       <div class="sidebar-foot">
@@ -106,7 +107,7 @@
     document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
     currentLocationId = locationId;
     await loadSubscription();
-  });
+  }, { skipSubscriptionBanner: true });
 
   async function loadSubscription() {
     const { data: sub, error } = await supabase

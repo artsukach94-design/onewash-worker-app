@@ -56,6 +56,7 @@
         <a class="nav-item active" href="locations.html">Мийки-клієнти</a>
         <a class="nav-item" href="applications.html">Заявки на підключення</a>
         <a class="nav-item" href="landing.html">Лендінг</a>
+        <a class="nav-item" href="subscription-payments.html">Оплати підписок</a>
       </div>
 
       <div class="sidebar-foot">
@@ -173,7 +174,7 @@
     document.getElementById('app-update-panel').style.display = 'block';
     await loadLocations();
     await loadPlatformSettings();
-  });
+  }, { skipSubscriptionBanner: true });
 
   // ==== НАЛАШТУВАННЯ ПЛАТФОРМИ (лише суперадмін) ====
   async function loadPlatformSettings() {

@@ -56,6 +56,7 @@
         <a class="nav-item" href="locations.html">Мийки-клієнти</a>
         <a class="nav-item" href="applications.html">Заявки на підключення</a>
         <a class="nav-item" href="landing.html">Лендінг</a>
+        <a class="nav-item" href="subscription-payments.html">Оплати підписок</a>
       </div>
 
       <div class="sidebar-foot">
@@ -76,14 +77,6 @@
             <div><b id="push-banner-title">Увімкнути сповіщення</b><br><span id="push-banner-sub">Про нові записи через сайт та інші події</span></div>
           </div>
           <button class="btn btn-sm" id="push-toggle-btn" style="background:var(--cyan-500);border-color:var(--cyan-500);color:#04202F;font-weight:600;white-space:nowrap;">Увімкнути</button>
-        </div>
-
-        <div id="sub-banner" class="push" style="display:none;align-items:center;justify-content:space-between;border-left-color:var(--red-600);">
-          <div style="display:flex;gap:10px;align-items:flex-start;">
-            <div class="ic" style="color:var(--red-600);">💳</div>
-            <div><b id="sub-banner-title">Підключіть оплату підписки</b><br><span id="sub-banner-sub">1000 грн/міс — мийка не видима клієнтам, поки не оплачено</span></div>
-          </div>
-          <button class="btn btn-sm" id="sub-pay-btn" style="background:var(--cyan-500);border-color:var(--cyan-500);color:#04202F;font-weight:600;white-space:nowrap;">Оплатити</button>
         </div>
 
         <div class="stat-grid">
@@ -160,7 +153,6 @@
     currentAdminForPush = admin;
     currentLocationId = locationId;
     await refreshPushBanner();
-    await refreshSubscriptionBanner(locationId);
     await loadDashboard(locationId);
 
     subscribeToTable('dashboard-' + locationId, 'bookings', `location_id=eq.${locationId}`, () => {
@@ -194,47 +186,6 @@
       btn.textContent = 'Увімкнути';
     }
   }
-
-  // ==== ПІДПИСКА НА ПЛАТФОРМУ (1000 грн/міс) ====
-  async function refreshSubscriptionBanner(locationId) {
-    const banner = document.getElementById('sub-banner');
-    const { data: sub, error } = await supabase
-      .from('platform_subscriptions')
-      .select('status')
-      .eq('location_id', locationId)
-      .maybeSingle();
-
-    if (error || !sub || sub.status === 'active') { banner.style.display = 'none'; return; }
-
-    banner.style.display = 'flex';
-    const title = document.getElementById('sub-banner-title');
-    const sub_ = document.getElementById('sub-banner-sub');
-    if (sub.status === 'past_due') {
-      title.textContent = 'Підписку призупинено';
-      sub_.textContent = 'Оплата не пройшла, мийку приховано з застосунку — оплатіть, щоб знову з\'явитись клієнтам';
-    } else {
-      title.textContent = 'Підключіть оплату підписки';
-      sub_.textContent = '1000 грн/міс — мийка не видима клієнтам, поки не оплачено';
-    }
-  }
-
-  document.getElementById('sub-pay-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('sub-pay-btn');
-    btn.disabled = true;
-    btn.textContent = 'Готуємо оплату...';
-    try {
-      const { data, error } = await supabase.functions.invoke('create-subscription-invoice', {
-        body: { locationId: currentLocationId },
-      });
-      if (error || !data?.pageUrl) throw new Error(data?.error || error?.message || 'Не вдалося створити рахунок');
-      window.open(data.pageUrl, '_blank');
-    } catch (err) {
-      alert('Помилка: ' + (err.message || 'спробуйте ще раз'));
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Оплатити';
-    }
-  });
 
   document.getElementById('push-toggle-btn').addEventListener('click', async () => {
     const btn = document.getElementById('push-toggle-btn');

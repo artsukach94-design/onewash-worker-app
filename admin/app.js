@@ -189,7 +189,7 @@ export function setSelectedLocationId(id) {
 // Головна функція ініціалізації сторінки адмінки.
 // onReady(admin, locations, selectedLocationId) викликається,
 // коли адмін залогінений і мийку для перегляду обрано.
-export async function initAdminPage(onReady) {
+export async function initAdminPage(onReady, opts = {}) {
   const loginView = document.getElementById('login-view');
   const appView = document.getElementById('app-view');
 
@@ -235,8 +235,116 @@ export async function initAdminPage(onReady) {
 
   renderLocationSwitcher(locations, selectedId);
   setupMobileNav();
+  if (!opts.skipSubscriptionBanner) {
+    await setupSubscriptionBanner(selectedId);
+  }
 
   await onReady(admin, locations, selectedId);
+}
+
+// Банер стану платформної підписки — інжектиться під топбар на КОЖНІЙ
+// сторінці адмінки (крім тих, що самі викликають initAdminPage з
+// { skipSubscriptionBanner: true }, як-от subscription.html, де вже є повна
+// картина, чи суперадмінські платформні сторінки, не прив'язані до однієї
+// мийки). Функціонал лишається доступним — це лише нагадування, а не блок:
+// зникає само собою на кожній сторінці, щойно платіж проходить успішно.
+async function setupSubscriptionBanner(locationId) {
+  // Банер вставляємо ПЕРШИМ у .content (не після .topbar) — там уже є
+  // потрібні бокові відступи (.content{padding}), інакше він притулиться
+  // впритул до країв, на відміну від решти вмісту сторінки.
+  const content = document.getElementById('page-content');
+  if (!content) return;
+
+  let banner = document.getElementById('global-sub-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'global-sub-banner';
+    banner.className = 'push';
+    banner.style.cssText = 'display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-left-color:var(--red-600);margin:0 0 18px;';
+    banner.innerHTML = `
+      <div style="display:flex;gap:10px;align-items:flex-start;">
+        <div class="ic" style="color:var(--red-600);">💳</div>
+        <div><b id="global-sub-banner-title"></b><br><span id="global-sub-banner-sub"></span></div>
+      </div>
+      <button class="btn btn-sm" id="global-sub-banner-btn" style="background:var(--cyan-500);border-color:var(--cyan-500);color:#04202F;font-weight:600;white-space:nowrap;"></button>
+    `;
+    content.prepend(banner);
+  }
+
+  const { data: sub, error } = await supabase
+    .from('platform_subscriptions')
+    .select('status, manually_blocked, next_charge_date')
+    .eq('location_id', locationId)
+    .maybeSingle();
+
+  // Не вдалось перевірити — не показуємо зайвий банер поверх робочого екрана.
+  if (error) { banner.style.display = 'none'; return; }
+
+  const title = banner.querySelector('#global-sub-banner-title');
+  const subEl = banner.querySelector('#global-sub-banner-sub');
+  const btn = banner.querySelector('#global-sub-banner-btn');
+
+  if (!sub) {
+    banner.style.display = 'flex';
+    btn.style.display = 'inline-block';
+    title.textContent = 'Підключіть оплату підписки';
+    subEl.textContent = '1000 грн/міс — мийка не видима клієнтам, поки не оплачено';
+    btn.textContent = 'Оплатити';
+    btn.onclick = () => paySubscriptionNow(locationId, btn);
+    return;
+  }
+
+  if (sub.manually_blocked) {
+    banner.style.display = 'flex';
+    btn.style.display = 'none';
+    title.textContent = 'Мийку заблоковано адміністрацією платформи';
+    subEl.textContent = 'Зверніться в підтримку Mage Wash, якщо вважаєте це помилкою';
+    return;
+  }
+
+  if (sub.status === 'active') {
+    banner.style.display = 'none';
+    return;
+  }
+
+  banner.style.display = 'flex';
+  btn.style.display = 'inline-block';
+
+  if (sub.status === 'past_due') {
+    title.textContent = 'Підписку призупинено';
+    subEl.textContent = 'Оплата не пройшла, мийку приховано з застосунку — оплатіть, щоб знову з\'явитись клієнтам';
+    btn.textContent = 'Оплатити';
+    btn.onclick = () => paySubscriptionNow(locationId, btn);
+  } else if (sub.status === 'canceled') {
+    const dateLabel = sub.next_charge_date ? new Date(sub.next_charge_date).toLocaleDateString('uk-UA') : '';
+    title.textContent = 'Підписку скасовано';
+    subEl.textContent = `Доступ триває до ${dateLabel} — керуйте підпискою в розділі "Підписка"`;
+    btn.textContent = 'Підписка →';
+    btn.onclick = () => { window.location.href = 'subscription.html'; };
+  } else {
+    title.textContent = 'Підключіть оплату підписки';
+    subEl.textContent = '1000 грн/міс — мийка не видима клієнтам, поки не оплачено';
+    btn.textContent = 'Оплатити';
+    btn.onclick = () => paySubscriptionNow(locationId, btn);
+  }
+}
+
+async function paySubscriptionNow(locationId, btn) {
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Готуємо оплату...';
+  try {
+    const { data, error } = await supabase.functions.invoke('create-subscription-invoice', {
+      body: { locationId },
+    });
+    if (error || !data?.pageUrl) throw new Error(data?.error || error?.message || 'Не вдалося створити рахунок');
+    window.open(data.pageUrl, '_blank');
+  } catch (err) {
+    alert('Помилка: ' + (err.message || 'спробуйте ще раз'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
 }
 
 // Гамбургер-кнопка й висувна sidebar-панель на вузьких екранах. Інжектиться

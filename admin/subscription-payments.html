@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mage Wash — Оплати підписок</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mage Wash Admin">
+<meta name="theme-color" content="#0A1E30">
+<link rel="stylesheet" href="style.css">
+<style>
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:600;}
+  .badge.success{background:#E4F5EB;color:#2F9E62;}
+  .badge.failure{background:#FCE9E9;color:#D64545;}
+  .badge.expired{background:#F1E9FC;color:#7C4FD6;}
+  .badge.pending{background:#FFF4DE;color:#B4740A;}
+  .badge.pending.stuck{background:#FCE9E9;color:#D64545;}
+  .stuck-hint{font-size:11px;color:var(--red-600);margin-left:6px;}
+</style>
+</head>
+<body>
+
+<div id="login-view" style="display:none;">
+  <div class="login-box">
+    <h1>Mage Wash</h1>
+    <p>Вхід для адміністраторів</p>
+    <form id="login-form">
+      <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+      <div class="form-group"><label>Пароль</label><input type="password" id="login-password" required></div>
+      <button type="submit" class="submit-btn">Увійти</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+  <div class="app">
+    <div class="sidebar">
+      <div class="brand">
+        <img src="icon-192.png" class="brand-mark" style="object-fit:cover;">
+        <div class="brand-text"><b>Mage Wash</b><span id="admin-name">—</span></div>
+      </div>
+      <div class="loc-switcher" id="loc-switcher">—</div>
+
+      <div class="nav-group">
+        <div class="nav-label">Робота</div>
+        <a class="nav-item" href="index.html">Дошка дня</a>
+        <a class="nav-item" href="calendar.html">Календар записів</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Керування мийкою</div>
+        <a class="nav-item" href="clients.html">Клієнти та авто</a>
+        <a class="nav-item" href="workers.html">Мийники</a>
+        <a class="nav-item" href="services.html">Послуги та ціни</a>
+        <a class="nav-item" href="payments.html">Посилання на оплату</a>
+        <a class="nav-item" href="reviews.html">Відгуки</a>
+        <a class="nav-item" href="broadcast.html">Розсилка push</a>
+        <a class="nav-item" href="analytics.html">Аналітика</a>
+        <a class="nav-item" href="subscription.html">Підписка</a>
+      </div>
+      <div class="nav-group" id="platform-nav" style="display:none;">
+        <div class="nav-label">Платформа</div>
+        <a class="nav-item" href="locations.html">Мийки-клієнти</a>
+        <a class="nav-item" href="applications.html">Заявки на підключення</a>
+        <a class="nav-item" href="landing.html">Лендінг</a>
+        <a class="nav-item active" href="subscription-payments.html">Оплати підписок</a>
+      </div>
+
+      <div class="sidebar-foot">
+        <b id="footer-name">—</b>
+        <span class="logout-link" id="logout-btn">Вийти</span>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div><h1>Оплати підписок</h1><div class="sub">Історія списань по всіх мийках платформи</div></div>
+        <button class="btn btn-sm" id="refresh-btn">Оновити</button>
+      </div>
+      <div class="content" id="page-content">
+
+        <div id="not-superadmin" class="empty-state" style="display:none;">Цей розділ доступний лише власнику платформи.</div>
+
+        <div id="payments-panel" style="display:none;">
+          <div class="panel">
+            <div class="panel-body">
+              <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr><th>Дата</th><th>Мийка</th><th>Тип</th><th>Сума</th><th>Статус</th><th>order_reference</th></tr>
+                </thead>
+                <tbody id="payments-body">
+                  <tr><td colspan="6" style="color:var(--text-2);">Завантаження...</td></tr>
+                </tbody>
+              </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, initAdminPage, wireLoginForm, logout } from './app.js';
+
+  wireLoginForm();
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  initAdminPage(async (admin) => {
+    if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
+    document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
+
+    if (!admin.is_superadmin) {
+      document.getElementById('not-superadmin').style.display = 'block';
+      return;
+    }
+    document.getElementById('payments-panel').style.display = 'block';
+    await loadPayments();
+  }, { skipSubscriptionBanner: true });
+
+  document.getElementById('refresh-btn').addEventListener('click', loadPayments);
+
+  const KIND_LABEL = { first_payment: 'Перший платіж', recurring: 'Щомісячне списання' };
+  const STATUS_LABEL = { pending: 'В обробці', success: 'Успішно', failure: 'Не пройшло', expired: 'Прострочено' };
+
+  function fmtDate(iso) {
+    return new Date(iso).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  async function loadPayments() {
+    const tbody = document.getElementById('payments-body');
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-2);">Завантаження...</td></tr>';
+
+    const { data, error } = await supabase
+      .from('subscription_payments')
+      .select('*, locations(name)')
+      .order('initiated_at', { ascending: false })
+      .limit(300);
+
+    if (error) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--red-600);">Не вдалося завантажити</td></tr>';
+      return;
+    }
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-2);">Ще немає жодної оплати</td></tr>';
+      return;
+    }
+
+    const now = Date.now();
+    tbody.innerHTML = data.map((p) => {
+      const isStuck = p.status === 'pending' && (now - new Date(p.initiated_at).getTime()) > 60 * 60 * 1000;
+      const badgeClass = `badge ${p.status}${isStuck ? ' stuck' : ''}`;
+      return `
+        <tr>
+          <td>${fmtDate(p.initiated_at)}</td>
+          <td>${p.locations?.name || '—'}</td>
+          <td>${KIND_LABEL[p.kind] || p.kind}</td>
+          <td>${Math.round(p.amount)} грн</td>
+          <td><span class="${badgeClass}">${STATUS_LABEL[p.status] || p.status}</span>${isStuck ? '<span class="stuck-hint">⚠ зависло &gt;1 год</span>' : ''}</td>
+          <td style="font-family:monospace;font-size:12px;color:var(--text-2);">${p.order_reference}</td>
+        </tr>`;
+    }).join('');
+  }
+</script>
+</body>
+</html>
