@@ -674,7 +674,7 @@
       const washLabel = formatServicesLabel(b);
       const boxLabel = b.wash_boxes?.name ? ' · ' + b.wash_boxes.name : '';
       const endLabel = b.scheduled_end ? ` (до ${new Date(b.scheduled_end).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })})` : '';
-      const sourceLabel = { site: 'сайт', manual: 'вручну', call: 'дзвінок', admin: 'адмін' }[b.source] || b.source;
+      const sourceLabel = { site: 'сайт', mobile_app: 'мобільний застосунок', manual: 'вручну', call: 'дзвінок', admin: 'адмін' }[b.source] || b.source;
 
       const row = document.createElement('div');
       row.className = 'sched-row';
