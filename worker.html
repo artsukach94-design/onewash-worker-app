@@ -322,12 +322,21 @@
       return;
     }
 
+    // Які записи вже мають коментар адміна — щоб підсвітити 💬 зеленим, не
+    // відкриваючи кожен запис окремо.
+    const { data: commentedRows } = await supabase
+      .from('booking_comments')
+      .select('booking_id')
+      .in('booking_id', bookings.map(b => b.id))
+      .is('parent_id', null);
+    const commentedIds = new Set((commentedRows || []).map(c => c.booking_id));
+
     pageSub.textContent = `У вас ${bookings.length} записів сьогодні`;
     jobsList.innerHTML = '';
-    bookings.forEach(b => jobsList.appendChild(renderJobCard(b, staff)));
+    bookings.forEach(b => jobsList.appendChild(renderJobCard(b, staff, commentedIds.has(b.id))));
   }
 
-  function renderJobCard(b, staff) {
+  function renderJobCard(b, staff, hasComment) {
     const card = document.createElement('div');
     card.className = 'job-card';
     card.id = 'job-' + b.id;
@@ -357,7 +366,7 @@
       <p class="job-car"><b>Послуга:</b> ${washLabel}</p>
       <div class="job-meta"><b>Клієнт:</b> ${clientLabel} ${b.clients?.phone ? `<a href="tel:${b.clients.phone}" style="color:var(--cyan-600);font-weight:700;text-decoration:none;">📞 Подзвонити</a>` : ''}</div>
       <div class="job-meta"><b>Авто:</b> ${carLabel}</div>
-      <div class="job-actions">${actions}<button class="btn-comments" data-id="${b.id}" style="background:none;border:1px solid var(--border,#E2E8F0);border-radius:8px;padding:8px 12px;font-size:12.5px;">💬</button></div>
+      <div class="job-actions">${actions}<button class="btn-comments" data-id="${b.id}" style="${hasComment ? 'background:var(--green-100);border:1px solid var(--green-600);color:var(--green-600);' : 'background:none;border:1px solid var(--border,#E2E8F0);'}border-radius:8px;padding:8px 12px;font-size:12.5px;" title="${hasComment ? 'Є коментар від адміна' : 'Коментарі для мийників'}">💬</button></div>
     `;
     return card;
   }

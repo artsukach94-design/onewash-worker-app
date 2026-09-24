@@ -673,6 +673,15 @@
     const statusLabels = { pending: 'Не підтверджено', confirmed: 'Заброньовано', in_progress: 'В процесі', done: 'Виконано', no_show: 'Не з\'явився', cancelled: 'Скасовано' };
     const pillClasses = { pending: 'pending', confirmed: 'confirmed', in_progress: 'progress', done: 'done', no_show: 'no_show', cancelled: 'no_show' };
 
+    // Які записи вже мають коментар — щоб підсвітити 💬 зеленим, не
+    // відкриваючи кожен запис окремо.
+    const { data: commentedRows } = await supabase
+      .from('booking_comments')
+      .select('booking_id')
+      .in('booking_id', bookings.map(b => b.id))
+      .is('parent_id', null);
+    const commentedIds = new Set((commentedRows || []).map(c => c.booking_id));
+
     list.innerHTML = '';
     bookings.forEach(b => {
       const carLabel = b.cars ? `${b.cars.brand_model || ''} · ${b.cars.plate || ''}` : 'Без даних авто';
@@ -686,12 +695,16 @@
       const row = document.createElement('div');
       row.className = 'sched-row';
       const canCancel = !['cancelled', 'done', 'no_show'].includes(b.status);
+      const hasComment = commentedIds.has(b.id);
+      const commentBtnStyle = hasComment
+        ? 'margin-left:8px;background:var(--green-100);border-color:var(--green-600);color:var(--green-600);'
+        : 'margin-left:8px;';
       row.innerHTML = `
         <div class="sched-time">${formatTime(b.scheduled_at)}${endLabel}</div>
         <div class="sched-info"><b>${carLabel}</b><span>${clientLabel} · ${washLabel} · ${staffLabel}${boxLabel} · ${sourceLabel}</span></div>
         ${renderPayBadge(b)}
         <span class="pill ${pillClasses[b.status] || ''}">${statusLabels[b.status] || b.status}</span>
-        <button class="btn btn-sm comments-btn" data-id="${b.id}" style="margin-left:8px;" title="Коментарі для мийників">💬</button>
+        <button class="btn btn-sm comments-btn" data-id="${b.id}" style="${commentBtnStyle}" title="${hasComment ? 'Є коментар від адміна' : 'Коментарі для мийників'}">💬</button>
         ${canCancel ? `<button class="btn btn-sm cancel-btn" data-id="${b.id}" style="margin-left:8px;color:var(--red-600);">Скасувати</button>` : ''}
       `;
       list.appendChild(row);

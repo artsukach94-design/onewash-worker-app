@@ -148,6 +148,15 @@
       return;
     }
 
+    // Які записи вже мають коментар адміна — щоб підсвітити 💬 зеленим, не
+    // відкриваючи кожен запис окремо.
+    const { data: commentedRows } = await supabase
+      .from('booking_comments')
+      .select('booking_id')
+      .in('booking_id', bookings.map(b => b.id))
+      .is('parent_id', null);
+    const commentedIds = new Set((commentedRows || []).map(c => c.booking_id));
+
     box.innerHTML = '';
     bookings.forEach(b => {
       const row = document.createElement('div');
@@ -156,6 +165,10 @@
       const clientLabel = b.clients?.full_name || b.clients?.phone || 'Клієнт не вказаний';
       const washLabel = formatServicesLabel(b);
       const unassigned = !b.staff_id;
+      const hasComment = commentedIds.has(b.id);
+      const commentStyle = hasComment
+        ? 'font-size:13px;cursor:pointer;margin-right:6px;background:var(--green-100);color:var(--green-600);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;'
+        : 'font-size:15px;cursor:pointer;margin-right:6px;';
 
       row.innerHTML = `
         <span class="slot-time">${formatTime(b.scheduled_at)}</span>
@@ -164,7 +177,7 @@
           <span>${clientLabel} · ${carLabel}</span>
         </div>
         ${b.clients?.phone ? `<a href="tel:${b.clients.phone}" style="color:var(--cyan-600);font-size:16px;text-decoration:none;margin-right:6px;" title="Подзвонити клієнту">📞</a>` : ''}
-        <span class="slot-comments" data-id="${b.id}" style="font-size:15px;cursor:pointer;margin-right:6px;" title="Коментарі для мийників">💬</span>
+        <span class="slot-comments" data-id="${b.id}" style="${commentStyle}" title="${hasComment ? 'Є коментар від адміна' : 'Коментарі для мийників'}">💬</span>
         ${unassigned ? `<span class="slot-take" data-id="${b.id}" style="color:var(--cyan-600);font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap;">Взяти</span>` : ''}
       `;
       box.appendChild(row);
