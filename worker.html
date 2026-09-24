@@ -91,7 +91,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initPage, wireLoginForm, logout, formatTime, formatServicesLabel, subscribeToTable, getPushSubscriptionStatus, enablePushNotifications, disablePushNotifications, isIos, isStandaloneApp } from './app.js';
+  import { supabase, initPage, wireLoginForm, logout, formatTime, formatServicesLabel, subscribeToTable, getPushSubscriptionStatus, enablePushNotifications, disablePushNotifications, isIos, isStandaloneApp, openBookingComments } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -357,7 +357,7 @@
       <p class="job-car"><b>Послуга:</b> ${washLabel}</p>
       <div class="job-meta"><b>Клієнт:</b> ${clientLabel} ${b.clients?.phone ? `<a href="tel:${b.clients.phone}" style="color:var(--cyan-600);font-weight:700;text-decoration:none;">📞 Подзвонити</a>` : ''}</div>
       <div class="job-meta"><b>Авто:</b> ${carLabel}</div>
-      <div class="job-actions">${actions}</div>
+      <div class="job-actions">${actions}<button class="btn-comments" data-id="${b.id}" style="background:none;border:1px solid var(--border,#E2E8F0);border-radius:8px;padding:8px 12px;font-size:12.5px;">💬</button></div>
     `;
     return card;
   }
@@ -385,6 +385,9 @@
     if (e.target.classList.contains('btn-confirm')) {
       await supabase.from('bookings').update({ status: 'confirmed' }).eq('id', id);
       location.reload();
+    }
+    if (e.target.classList.contains('btn-comments')) {
+      openBookingComments(id, currentStaffForPush);
     }
   });
 

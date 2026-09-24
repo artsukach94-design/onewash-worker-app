@@ -500,3 +500,137 @@ export async function disablePushNotifications() {
     await subscription.unsubscribe();
   }
 }
+
+// ==== ВНУТРІШНІ КОМЕНТАРІ ДО ЗАПИСУ ====
+// Бачить лише персонал (адмін, суперадмін, мийники цієї мийки) — КЛІЄНТ не
+// бачить ніколи (в мобільному застосунку цієї таблиці просто немає). Головний
+// коментар може створити лише адмін (закріплено CHECK-обмеженням у БД, не
+// лише тут) — мийники можуть тільки відповідати в гілці під ним.
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
+}
+
+let commentsCurrentAdmin = null;
+
+function ensureCommentsModal() {
+  if (document.getElementById('bc-modal')) return;
+  const div = document.createElement('div');
+  div.id = 'bc-modal';
+  div.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(10,30,48,0.45);align-items:center;justify-content:center;z-index:50;padding:20px;';
+  div.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:20px;width:min(460px,92vw);max-height:85vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="margin:0;font-size:15px;">Коментарі до запису</h3>
+        <span id="bc-close" style="cursor:pointer;font-size:20px;color:var(--text-3);line-height:1;">×</span>
+      </div>
+      <div id="bc-list"></div>
+      <div id="bc-root-form" style="margin-top:14px;">
+        <textarea id="bc-root-text" placeholder="Написати коментар для мийників..." style="width:100%;min-height:70px;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;box-sizing:border-box;"></textarea>
+        <button class="btn btn-primary btn-sm" id="bc-root-submit" style="margin-top:8px;">Додати коментар</button>
+      </div>
+      <div id="bc-reply-form" style="margin-top:14px;display:none;">
+        <textarea id="bc-reply-text" placeholder="Написати відповідь..." style="width:100%;min-height:60px;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;box-sizing:border-box;"></textarea>
+        <button class="btn btn-sm" id="bc-reply-submit" style="margin-top:8px;">Відповісти</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(div);
+
+  document.getElementById('bc-close').addEventListener('click', () => { div.style.display = 'none'; });
+  div.addEventListener('click', (e) => { if (e.target === div) div.style.display = 'none'; });
+
+  document.getElementById('bc-root-submit').addEventListener('click', async () => {
+    const bookingId = div.dataset.bookingId;
+    const text = document.getElementById('bc-root-text').value.trim();
+    if (!text || !commentsCurrentAdmin) return;
+    const { error } = await supabase.from('booking_comments').insert({
+      booking_id: bookingId, parent_id: null, author_kind: 'admin',
+      author_admin_id: commentsCurrentAdmin.id,
+      author_name: commentsCurrentAdmin.full_name || 'Адміністратор',
+      body: text,
+    });
+    if (error) { console.error(error); alert('Не вдалося додати коментар'); return; }
+    document.getElementById('bc-root-text').value = '';
+    await openBookingComments(bookingId, commentsCurrentAdmin);
+  });
+
+  document.getElementById('bc-reply-submit').addEventListener('click', async () => {
+    const bookingId = div.dataset.bookingId;
+    const rootId = div.dataset.rootId;
+    const text = document.getElementById('bc-reply-text').value.trim();
+    if (!text || !rootId || !commentsCurrentAdmin) return;
+    const { error } = await supabase.from('booking_comments').insert({
+      booking_id: bookingId, parent_id: rootId, author_kind: 'admin',
+      author_admin_id: commentsCurrentAdmin.id,
+      author_name: commentsCurrentAdmin.full_name || 'Адміністратор',
+      body: text,
+    });
+    if (error) { console.error(error); alert('Не вдалося додати відповідь'); return; }
+    document.getElementById('bc-reply-text').value = '';
+    await openBookingComments(bookingId, commentsCurrentAdmin);
+  });
+}
+
+function renderBookingComments(comments) {
+  const modal = document.getElementById('bc-modal');
+  const root = comments.find(c => !c.parent_id);
+  const replies = comments.filter(c => c.parent_id);
+  const list = document.getElementById('bc-list');
+  const fmtDate = (iso) => new Date(iso).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+  if (!root) {
+    list.innerHTML = '<p style="font-size:13px;color:var(--text-2);">Ще немає коментаря. Додайте перший — мийники його побачать.</p>';
+    document.getElementById('bc-root-form').style.display = 'block';
+    document.getElementById('bc-reply-form').style.display = 'none';
+    return;
+  }
+
+  modal.dataset.rootId = root.id;
+  document.getElementById('bc-root-form').style.display = 'none';
+  document.getElementById('bc-reply-form').style.display = 'block';
+
+  let html = `
+    <div style="background:#FFF8E6;border-left:3px solid var(--cyan-600);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+      <div style="font-size:11.5px;color:var(--text-2);margin-bottom:3px;">${escapeHtml(root.author_name)} · ${fmtDate(root.created_at)}</div>
+      <div style="font-size:13.5px;white-space:pre-wrap;">${escapeHtml(root.body)}</div>
+    </div>
+  `;
+
+  if (replies.length === 0) {
+    html += '<p style="font-size:12.5px;color:var(--text-3);margin:0 0 8px;">Ще немає відповідей</p>';
+  } else {
+    html += replies.map(r => `
+      <div style="margin:0 0 8px 16px;padding:8px 12px;background:#F5F6F8;border-radius:8px;">
+        <div style="font-size:11px;color:var(--text-2);margin-bottom:2px;">${escapeHtml(r.author_name)}${r.author_kind === 'staff' ? ' (мийник)' : ''} · ${fmtDate(r.created_at)}</div>
+        <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(r.body)}</div>
+      </div>
+    `).join('');
+  }
+
+  list.innerHTML = html;
+}
+
+// admin — рядок з getCurrentAdmin()/адмінського initAdminPage.
+export async function openBookingComments(bookingId, admin) {
+  ensureCommentsModal();
+  commentsCurrentAdmin = admin;
+  const modal = document.getElementById('bc-modal');
+  modal.dataset.bookingId = bookingId;
+  modal.style.display = 'flex';
+  document.getElementById('bc-list').innerHTML = '<p style="font-size:13px;color:var(--text-2);">Завантаження...</p>';
+
+  const { data, error } = await supabase
+    .from('booking_comments')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error(error);
+    document.getElementById('bc-list').innerHTML = '<p style="font-size:13px;color:var(--red-600);">Не вдалося завантажити коментарі</p>';
+    return;
+  }
+  renderBookingComments(data || []);
+}

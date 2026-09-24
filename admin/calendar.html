@@ -190,12 +190,13 @@
 </div>
 
 <script type="module">
-  import { supabase, initAdminPage, wireLoginForm, logout, formatTime, formatServicesLabel } from './app.js';
+  import { supabase, initAdminPage, wireLoginForm, logout, formatTime, formatServicesLabel, openBookingComments } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
 
   let currentLocationId = null;
+  let currentAdmin = null;
   let selectedDate = new Date(); selectedDate.setHours(0, 0, 0, 0);
   let staffList = [], vehicleTypes = [], washTypes = [], boxList = [], extraServices = [], washPrices = [];
   let modalWorkingHours = {};
@@ -325,6 +326,7 @@
     if (admin.is_superadmin) document.getElementById('platform-nav').style.display = 'block';
     document.getElementById('footer-name').textContent = admin.full_name || (admin.is_superadmin ? 'Суперадмін' : 'Адміністратор');
     currentLocationId = locationId;
+    currentAdmin = admin;
 
     await loadOptions();
     await loadDay();
@@ -684,6 +686,7 @@
         <div class="sched-info"><b>${carLabel}</b><span>${clientLabel} · ${washLabel} · ${staffLabel}${boxLabel} · ${sourceLabel}</span></div>
         ${renderPayBadge(b)}
         <span class="pill ${pillClasses[b.status] || ''}">${statusLabels[b.status] || b.status}</span>
+        <button class="btn btn-sm comments-btn" data-id="${b.id}" style="margin-left:8px;" title="Коментарі для мийників">💬</button>
         ${canCancel ? `<button class="btn btn-sm cancel-btn" data-id="${b.id}" style="margin-left:8px;color:var(--red-600);">Скасувати</button>` : ''}
       `;
       list.appendChild(row);
@@ -695,6 +698,10 @@
         await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', btn.dataset.id);
         await loadDay();
       });
+    });
+
+    document.querySelectorAll('.comments-btn').forEach(btn => {
+      btn.addEventListener('click', () => openBookingComments(btn.dataset.id, currentAdmin));
     });
 
     document.querySelectorAll('.pay-badge').forEach(badge => {

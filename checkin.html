@@ -42,6 +42,7 @@
     <div class="content">
       <div class="page-h" id="page-h">Авто приїхало</div>
       <div class="page-sub" id="page-sub">Заповніть дані перед миттям</div>
+      <button type="button" id="checkin-comments-btn" style="display:none;background:none;border:1px solid var(--border,#E2E8F0);border-radius:8px;padding:8px 14px;font-size:12.5px;margin-bottom:12px;">💬 Коментарі для мийників</button>
 
       <div id="today-quick-list" style="display:none;">
         <div class="section-label">Записи на сьогодні</div>
@@ -136,7 +137,7 @@
 </div>
 
 <script type="module">
-  import { supabase, initPage, wireLoginForm, logout } from './app.js';
+  import { supabase, initPage, wireLoginForm, logout, openBookingComments } from './app.js';
 
   wireLoginForm();
   document.getElementById('logout-btn').addEventListener('click', logout);
@@ -353,6 +354,10 @@
       return;
     }
     existingBooking = booking;
+
+    const commentsBtn = document.getElementById('checkin-comments-btn');
+    commentsBtn.style.display = 'inline-block';
+    commentsBtn.onclick = () => openBookingComments(existingBookingId, currentStaff);
 
     document.getElementById('page-h').textContent = 'Авто приїхало за записом';
     document.getElementById('page-sub').textContent = `Запис на ${new Date(booking.scheduled_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })} — перевірте і доповніть дані`;
